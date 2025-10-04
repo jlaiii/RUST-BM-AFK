@@ -1,0 +1,158 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AFK Hour Adder - Rust Battlemetrics Automation Tool</title>
+    <!-- Load Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Use Inter font -->
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@100..900&display=swap');
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #0d1117; /* GitHub dark theme background */
+            color: #c9d1d9; /* GitHub text color */
+        }
+        .rust-orange {
+            color: #d8541c; /* Rust logo orange/brown color */
+        }
+        .rust-bg-orange {
+            background-color: #d8541c;
+        }
+    </style>
+    <!-- Load Lucide Icons -->
+    <script type="module">
+        import { createIcons, Home, Cpu, Clock, Shield, Shuffle, ListChecks, Terminal } from 'https://unpkg.com/lucide@latest/dist/umd/lucide.js';
+        createIcons({ icons: { Home, Cpu, Clock, Shield, Shuffle, ListChecks, Terminal } });
+    </script>
+</head>
+<body class="min-h-screen">
+
+    <!-- Header / Hero Section -->
+    <header class="py-16 border-b border-gray-700">
+        <div class="container mx-auto px-4 sm:px-6 lg:px-8 text-center">
+            <h1 class="text-4xl sm:text-6xl font-extrabold mb-4">
+                <span class="rust-orange">Rust</span> <span class="text-white">Battlemetrics</span> AFK Tool
+            </h1>
+            <p class="text-xl sm:text-2xl text-gray-400 mb-8 max-w-3xl mx-auto">
+                The smart, automated solution for accumulating Battlemetrics playtime hours on Rust servers.
+            </p>
+            
+            <a href="https://github.com/YourUsername/YourRepoName" target="_blank"
+               class="inline-flex items-center justify-center px-8 py-3 border border-transparent text-base font-medium rounded-lg text-white rust-bg-orange hover:bg-orange-700 transition duration-150 shadow-lg shadow-orange-900/50">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor" class="mr-2">
+                    <path d="M12 0c-6.626 0-12 5.373-12 12 0 5.302 3.438 9.809 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.082-.743.082-.729.082-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.833 2.807 1.304 3.492.997.107-.775.418-1.304.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.305-.535-1.524.118-3.176 0 0 1.008-.322 3.301 1.23.957-.266 1.983-.399 3.003-.404 1.02.005 2.046.138 3.003.404 2.292-1.552 3.297-1.23 3.297-1.23.653 1.652.242 2.871.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576c4.765-1.577 8.192-6.084 8.192-11.387c0-6.627-5.373-12-12-12z"/>
+                </svg>
+                View on GitHub
+            </a>
+            <p class="mt-4 text-sm text-gray-500">
+                Requires Python 3.x and the original Rust game client.
+            </p>
+        </div>
+    </header>
+
+    <!-- Features Section -->
+    <section id="features" class="py-20">
+        <div class="container mx-auto px-4 sm:px-6 lg:px-8">
+            <h2 class="text-3xl sm:text-4xl font-bold text-center mb-12 text-white">
+                Core Features & Automation
+            </h2>
+
+            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+
+                <!-- Feature 1: Server Rotation -->
+                <div class="bg-gray-800 p-6 rounded-xl shadow-xl hover:shadow-2xl transition duration-300 transform hover:scale-[1.02]">
+                    <i data-lucide="shuffle" class="rust-orange w-8 h-8 mb-4"></i>
+                    <h3 class="text-xl font-semibold mb-2 text-white">Intelligent Server Rotation</h3>
+                    <p class="text-gray-400">
+                        Automatically switch between a predefined list of servers within a randomized time range (e.g., 2-3 hours). Mimics human behavior to avoid suspicion and keep playtime diverse across servers.
+                    </p>
+                </div>
+
+                <!-- Feature 2: Stealth Mode -->
+                <div class="bg-gray-800 p-6 rounded-xl shadow-xl hover:shadow-2xl transition duration-300 transform hover:scale-[1.02]">
+                    <i data-lucide="shield" class="rust-orange w-8 h-8 mb-4"></i>
+                    <h3 class="text-xl font-semibold mb-2 text-white">Stealth Mode & Anti-AFK</h3>
+                    <p class="text-gray-400">
+                        Features the optional "Kill after movement" functionality. This ensures your character is downed right after moving, preventing continuous spectating by admins and maintaining a low profile.
+                    </p>
+                </div>
+
+                <!-- Feature 3: Full Automation Cycle -->
+                <div class="bg-gray-800 p-6 rounded-xl shadow-xl hover:shadow-2xl transition duration-300 transform hover:scale-[1.02]">
+                    <i data-lucide="cpu" class="rust-orange w-8 h-8 mb-4"></i>
+                    <h3 class="text-xl font-semibold mb-2 text-white">Full Console Automation</h3>
+                    <p class="text-gray-400">
+                        The tool handles the entire cycle: `client.disconnect`, `client.connect [IP]`, `respawn`, and simulated key presses (W + Space). No manual intervention is required after setup.
+                    </p>
+                </div>
+
+                <!-- Feature 4: Customizable Timing -->
+                <div class="bg-gray-800 p-6 rounded-xl shadow-xl hover:shadow-2xl transition duration-300 transform hover:scale-[1.02]">
+                    <i data-lucide="clock" class="rust-orange w-8 h-8 mb-4"></i>
+                    <h3 class="text-xl font-semibold mb-2 text-white">Adjustable AFK Interval</h3>
+                    <p class="text-gray-400">
+                        Easily customize the time interval between AFK cycles (1, 2, 5, or 10 minutes) directly through the GUI. Optimize the frequency of activity to your preference.
+                    </p>
+                </div>
+
+                <!-- Feature 5: Server Management -->
+                <div class="bg-gray-800 p-6 rounded-xl shadow-xl hover:shadow-2xl transition duration-300 transform hover:scale-[1.02]">
+                    <i data-lucide="list-checks" class="rust-orange w-8 h-8 mb-4"></i>
+                    <h3 class="text-xl font-semibold mb-2 text-white">Integrated Server Manager</h3>
+                    <p class="text-gray-400">
+                        Manage your server list directly in the application. Add, remove, and categorize servers (Premium/Non-Premium) for easy selection and configuration of the rotation list.
+                    </p>
+                </div>
+
+                <!-- Feature 6: Detailed Logging -->
+                <div class="bg-gray-800 p-6 rounded-xl shadow-xl hover:shadow-2xl transition duration-300 transform hover:scale-[1.02]">
+                    <i data-lucide="terminal" class="rust-orange w-8 h-8 mb-4"></i>
+                    <h3 class="text-xl font-semibold mb-2 text-white">Real-Time Status & Logging</h3>
+                    <p class="text-gray-400">
+                        Monitor the tool's activity with a real-time status display and a detailed log file that tracks every disconnect, connect, cycle count, and server switch for complete transparency.
+                    </p>
+                </div>
+
+            </div>
+        </div>
+    </section>
+
+    <!-- Installation Section -->
+    <section id="installation" class="py-16 bg-gray-900">
+        <div class="container mx-auto px-4 sm:px-6 lg:px-8">
+            <h2 class="text-3xl font-bold text-center mb-10 text-white">
+                Installation & Usage
+            </h2>
+            <div class="max-w-4xl mx-auto">
+                <div class="bg-gray-800 p-6 rounded-xl shadow-xl">
+                    <h3 class="text-xl font-semibold mb-4 rust-orange">Step 1: Prerequisites & Download</h3>
+                    <p class="text-gray-400 mb-4">
+                        Ensure you have **Python 3.x** installed. Download the `rust_battlemetrics_hour_adder.py` file from the repository.
+                        <strong class="block mt-2">The script will automatically install necessary dependencies (keyboard, pyautogui) upon its first run.</strong>
+                    </p>
+                    
+                    <h3 class="text-xl font-semibold mb-4 rust-orange">Step 2: Run the Tool</h3>
+                    <p class="text-gray-400 mb-2">
+                        Execute the script from your terminal in the downloaded directory:
+                    </p>
+                    <pre class="bg-black p-3 rounded-lg text-sm overflow-x-auto"><code>python rust_battlemetrics_hour_adder.py</code></pre>
+                    <p class="text-gray-400 mt-4 italic">
+                        The tool will launch a simple, intuitive GUI for server management and control.
+                    </p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Footer -->
+    <footer class="py-8 text-center text-gray-500 border-t border-gray-800 mt-12">
+        <p>&copy; 2025 Rust Hour Adder. Built for automation and efficiency.</p>
+        <p class="text-xs mt-2">
+            Use responsibly. Automation tools may violate server-specific rules.
+        </p>
+    </footer>
+
+</body>
+</html>
