@@ -55,7 +55,7 @@ class RustAFKHourAdder:
     def __init__(self):
         self.root = tk.Tk()
         self.root.title("Rust Battlemetrics AFK Hour Adder Tool")
-        self.root.geometry("650x800")  # Increased size to accommodate new buttons
+        self.root.geometry("650x900")  # Increased height to show GitHub link and version
         self.root.resizable(True, True)  # Allow resizing so users can adjust if needed
         
         # Create data folder
@@ -250,7 +250,19 @@ class RustAFKHourAdder:
         
         # Status
         self.status_label = tk.Label(self.root, text="Ready", font=("Arial", 10), fg="blue")
-        self.status_label.pack(pady=(10, 20))  # Added more bottom padding to prevent cutoff
+        self.status_label.pack(pady=(10, 5))
+        
+        # GitHub Link and Version
+        github_frame = tk.Frame(self.root)
+        github_frame.pack(pady=(5, 10))
+        
+        version_label = tk.Label(github_frame, text="v1.0.0", font=("Arial", 9), fg="gray")
+        version_label.pack()
+        
+        github_link = tk.Label(github_frame, text="https://jlaiii.github.io/RUST-BM-AFK/", 
+                              font=("Arial", 9), fg="blue", cursor="hand2")
+        github_link.pack()
+        github_link.bind("<Button-1>", lambda e: self.open_github_link())
         
         self.update_server_list()
         self.update_timer()
@@ -676,6 +688,12 @@ class RustAFKHourAdder:
             self.log_status(f"=== Rust Hour Adder Stopped ===")
             self.log_status(f"Total Battlemetrics hours added: {int(hours):02d}:{int(minutes):02d}:{int(seconds):02d}")
             self.log_status("="*50)
+    
+    def open_github_link(self):
+        """Open the GitHub link in the default web browser"""
+        import webbrowser
+        webbrowser.open("https://jlaiii.github.io/RUST-BM-AFK/")
+        self.log_status("Opened GitHub link in browser")
     
     def update_timer(self):
         if self.is_running and self.start_time:
