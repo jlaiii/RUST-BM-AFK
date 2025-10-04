@@ -1,0 +1,32 @@
+[
+  {
+    "name": "Rustafied.com US Long III",
+    "ip": "uslong3.rustafied.com:28015",
+    "premium": true
+  },
+  {
+    "name": "Rusty Moose US Medium",
+    "ip": "medium.us.moose.gg:28010",
+    "premium": true
+  },
+  {
+    "name": "Atlas - US 2X Monthly",
+    "ip": "216.39.240.89:28010",
+    "premium": false
+  },
+  {
+    "name": "UKN.GG - US Training Grounds - Main",
+    "ip": "64.40.8.152:28014",
+    "premium": false
+  },
+  {
+    "name": "Brasa.gg - BR 2X",
+    "ip": "2x.brasa.gg:28015",
+    "premium": false
+  },
+  {
+    "name": "[US] Stevious 2x Main | Vanilla",
+    "ip": "205.234.243.11:28010",
+    "premium": false
+  }
+]
