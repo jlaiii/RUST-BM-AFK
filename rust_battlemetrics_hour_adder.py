@@ -1066,7 +1066,6 @@ class RustAFKHourAdder:
     
     def afk_loop(self):
         cycle_count = 0
-        need_initial_connection = True
         while self.is_running:
             try:
                 cycle_count += 1
@@ -1080,7 +1079,6 @@ class RustAFKHourAdder:
                     if time_until_switch <= 0:
                         self.log_status("Server switch time reached - initiating switch")
                         self.switch_to_next_server()
-                        need_initial_connection = True  # Need to connect to new server
                     else:
                         # Always show countdown with percentage at start of each cycle
                         hours_remaining = int(time_until_switch // 3600)
@@ -1116,99 +1114,88 @@ class RustAFKHourAdder:
                 if (self.switch_enabled_var.get() and 
                     self.settings["server_switching"]["stealth_mode"]):
                     
-                    if need_initial_connection:
-                        # Stealth mode: Connect → Kill → Wait for full duration
-                        self.stealth_mode_cycle()
-                        need_initial_connection = False
-                    else:
-                        # In stealth mode, we just wait - no additional cycles needed
-                        self.log_status("STEALTH MODE: Waiting for server switch time...")
-                        time.sleep(30)  # Check every 30 seconds
-                        continue
+                    # Stealth mode: Always run full cycle (Connect → Kill → Wait)
+                    self.stealth_mode_cycle()
+                    continue
                 
-                # Only disconnect and connect on first cycle or after server switch (normal mode)
-                if need_initial_connection:
-                    # Step 1: Disconnect from current server first (if not disabled)
-                    if not self.settings.get("disable_startup_disconnect", False):
-                        step_start = datetime.now()
-                        self.log_status("STEP 1: Disconnecting from current server")
-                        self.log_status("   Opening console (F1 key)")
-                        pyautogui.press('f1')
-                        time.sleep(1)
-                        
-                        self.log_status("   Typing command: 'client.disconnect'")
-                        self.human_type("client.disconnect")
-                        self.log_status("   Pressing Enter to execute disconnect")
-                        pyautogui.press('enter')
-                        time.sleep(0.5)
-                        
-                        # Step 2: Close F1 after disconnect
-                        self.log_status("   Closing console (F1 key)")
-                        pyautogui.press('f1')
-                        self.log_status("   Waiting 3 seconds for disconnect to complete...")
-                        time.sleep(3)
-                        
-                        step_duration = (datetime.now() - step_start).total_seconds()
-                        self.log_status(f"STEP 1 COMPLETED in {step_duration:.1f}s - Server disconnection finished")
-                    else:
-                        self.log_status("STEP 1 SKIPPED: Initial startup disconnect disabled in settings")
-                        time.sleep(1)
-                    
-                    # Step 3: Open F1 and connect to target server
+                # Always disconnect and connect to server every cycle for reliability
+                # Step 1: Disconnect from current server first (if not disabled)
+                if not self.settings.get("disable_startup_disconnect", False):
                     step_start = datetime.now()
-                    self.log_status("STEP 2: Connecting to target server")
+                    self.log_status("STEP 1: Disconnecting from current server")
                     self.log_status("   Opening console (F1 key)")
                     pyautogui.press('f1')
                     time.sleep(1)
                     
-                    connect_command = f"client.connect {self.selected_server['ip']}"
-                    self.log_status(f"   Typing command: '{connect_command}'")
-                    self.log_status(f"   Target: {self.selected_server['name']}")
-                    self.human_type(connect_command)
-                    self.log_status("   Pressing Enter to execute connection")
+                    self.log_status("   Typing command: 'client.disconnect'")
+                    self.human_type("client.disconnect")
+                    self.log_status("   Pressing Enter to execute disconnect")
                     pyautogui.press('enter')
-                    time.sleep(1)
+                    time.sleep(0.5)
                     
-                    # Step 4: Close F1
+                    # Step 2: Close F1 after disconnect
                     self.log_status("   Closing console (F1 key)")
                     pyautogui.press('f1')
+                    self.log_status("   Waiting 3 seconds for disconnect to complete...")
+                    time.sleep(3)
                     
                     step_duration = (datetime.now() - step_start).total_seconds()
-                    self.log_status(f"STEP 2 COMPLETED in {step_duration:.1f}s - Connection command sent")
-                    
-                    # Step 5: Wait 1 minute
-                    self.log_status("=== Starting 1-minute connection stabilization wait ===")
-                    connection_wait_start = datetime.now()
-                    
-                    for second in range(60):  # 1 minute = 60 seconds
-                        if not self.is_running:
-                            self.log_status("AFK loop stopped by user during connection wait")
-                            return
-                        
-                        # Log every 15 seconds during this wait with detailed progress
-                        if second > 0 and second % 15 == 0:
-                            remaining_seconds = 60 - second
-                            elapsed_seconds = second
-                            progress_percent = (second / 60) * 100
-                            
-                            self.log_status(f"Connection wait progress: {elapsed_seconds}s elapsed | "
-                                          f"{remaining_seconds}s remaining | "
-                                          f"{progress_percent:.1f}% complete")
-                        
-                        # Update status every 5 seconds
-                        if second % 5 == 0:
-                            remaining = 60 - second
-                            self.status_label.config(text=f"Connecting... {remaining}s remaining")
-                        
-                        time.sleep(1)
-                    
-                    connection_wait_end = datetime.now()
-                    connection_wait_duration = (connection_wait_end - connection_wait_start).total_seconds()
-                    self.log_status(f"=== Connection wait completed in {connection_wait_duration:.1f} seconds ===")
-                    
-                    need_initial_connection = False  # Only connect once, then just do respawn cycles
+                    self.log_status(f"STEP 1 COMPLETED in {step_duration:.1f}s - Server disconnection finished")
                 else:
-                    self.log_status("STEP 1-2 SKIPPED: Already connected to server, proceeding with respawn cycle")
+                    self.log_status("STEP 1 SKIPPED: Initial startup disconnect disabled in settings")
+                    time.sleep(1)
+                
+                # Step 3: Open F1 and connect to target server
+                step_start = datetime.now()
+                self.log_status("STEP 2: Connecting to target server")
+                self.log_status("   Opening console (F1 key)")
+                pyautogui.press('f1')
+                time.sleep(1)
+                
+                connect_command = f"client.connect {self.selected_server['ip']}"
+                self.log_status(f"   Typing command: '{connect_command}'")
+                self.log_status(f"   Target: {self.selected_server['name']}")
+                self.human_type(connect_command)
+                self.log_status("   Pressing Enter to execute connection")
+                pyautogui.press('enter')
+                time.sleep(1)
+                
+                # Step 4: Close F1
+                self.log_status("   Closing console (F1 key)")
+                pyautogui.press('f1')
+                
+                step_duration = (datetime.now() - step_start).total_seconds()
+                self.log_status(f"STEP 2 COMPLETED in {step_duration:.1f}s - Connection command sent")
+                
+                # Step 5: Wait 1 minute for connection to stabilize
+                self.log_status("=== Starting 1-minute connection stabilization wait ===")
+                connection_wait_start = datetime.now()
+                
+                for second in range(60):  # 1 minute = 60 seconds
+                    if not self.is_running:
+                        self.log_status("AFK loop stopped by user during connection wait")
+                        return
+                    
+                    # Log every 15 seconds during this wait with detailed progress
+                    if second > 0 and second % 15 == 0:
+                        remaining_seconds = 60 - second
+                        elapsed_seconds = second
+                        progress_percent = (second / 60) * 100
+                        
+                        self.log_status(f"Connection wait progress: {elapsed_seconds}s elapsed | "
+                                      f"{remaining_seconds}s remaining | "
+                                      f"{progress_percent:.1f}% complete")
+                    
+                    # Update status every 5 seconds
+                    if second % 5 == 0:
+                        remaining = 60 - second
+                        self.status_label.config(text=f"Connecting... {remaining}s remaining")
+                    
+                    time.sleep(1)
+                
+                connection_wait_end = datetime.now()
+                connection_wait_duration = (connection_wait_end - connection_wait_start).total_seconds()
+                self.log_status(f"=== Connection wait completed in {connection_wait_duration:.1f} seconds ===")
                 
                 # Step 6: Open F1 and type respawn
                 step_start = datetime.now()
