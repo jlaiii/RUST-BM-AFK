@@ -3,304 +3,277 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>AFK Hour Adder - Rust Battlemetrics Automation Tool</title>
-    <!-- Load Tailwind CSS -->
-    <script src="https://cdn.tailwindcss.com"></script>
-    <!-- Use Inter font -->
+    <title>RUST-BM-AFK | Automated BattleMetrics Hour Accumulator</title>
     <style>
-        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@100..900&display=swap');
+        /* Global Styles */
+        :root {
+            --primary-color: #f16524; /* Rust orange/red */
+            --secondary-color: #333;
+            --background-color: #1a1a1a; /* Dark background */
+            --text-color: #f0f0f0; /* Light text */
+            --highlight-color: #00ff7f; /* Neon green/tech highlight */
+            --font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
         body {
-            font-family: 'Inter', sans-serif;
-            background-color: #0d1117; /* GitHub dark theme background */
-            color: #c9d1d9; /* GitHub text color */
+            font-family: var(--font-family);
+            background-color: var(--background-color);
+            color: var(--text-color);
+            line-height: 1.6;
+            overflow-x: hidden;
         }
-        .rust-orange {
-            color: #d8541c; /* Rust logo orange/brown color */
+
+        .container {
+            width: 90%;
+            max-width: 1200px;
+            margin: auto;
+            overflow: hidden;
         }
-        .rust-bg-orange {
-            background-color: #d8541c;
+
+        a {
+            color: var(--primary-color);
+            text-decoration: none;
+            transition: color 0.3s;
+        }
+
+        a:hover {
+            color: var(--highlight-color);
+        }
+
+        /* Header/Navigation */
+        header {
+            background: #111;
+            padding: 20px 0;
+            border-bottom: 2px solid var(--primary-color);
+        }
+
+        header .logo {
+            font-size: 1.8em;
+            font-weight: bold;
+            color: var(--text-color);
+            letter-spacing: 2px;
+            margin-right: 20px;
+        }
+
+        header .logo span {
+            color: var(--primary-color);
+        }
+
+        header nav a {
+            margin-left: 20px;
+            text-transform: uppercase;
+            font-weight: 500;
+        }
+
+        /* Hero Section */
+        #hero {
+            background: url('https://user-images.githubusercontent.com/60754290/118331102-74c10a00-b552-11eb-89e4-6c3e721d51a6.jpg') no-repeat center center/cover; /* Placeholder for a dark, industrial Rust theme background image */
+            height: 500px;
+            display: flex;
+            align-items: center;
+            text-align: center;
+            position: relative;
+        }
+
+        #hero::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0, 0, 0, 0.7); /* Dark overlay */
+            z-index: 1;
+        }
+
+        #hero .content {
+            position: relative;
+            z-index: 2;
+            width: 100%;
+        }
+
+        #hero h1 {
+            font-size: 3.5em;
+            margin-bottom: 20px;
+            text-transform: uppercase;
+            text-shadow: 0 0 10px rgba(241, 101, 36, 0.8);
+        }
+
+        #hero p {
+            font-size: 1.3em;
+            margin-bottom: 30px;
+            color: #ccc;
+        }
+
+        .cta-button {
+            display: inline-block;
+            background: var(--primary-color);
+            color: var(--background-color);
+            padding: 15px 30px;
+            text-transform: uppercase;
+            font-weight: bold;
+            border-radius: 5px;
+            transition: background-color 0.3s, transform 0.3s;
+            border: none;
+            cursor: pointer;
+        }
+
+        .cta-button:hover {
+            background-color: var(--highlight-color);
+            color: #111;
+            transform: scale(1.05);
+        }
+
+        /* Section Styling */
+        section {
+            padding: 60px 0;
+            border-bottom: 1px solid var(--secondary-color);
+        }
+
+        section h2 {
+            font-size: 2em;
+            text-align: center;
+            margin-bottom: 40px;
+            color: var(--primary-color);
+            text-transform: uppercase;
+        }
+
+        /* Features Section */
+        #features .feature-list {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 30px;
+            list-style: none;
+            padding: 0;
+        }
+
+        #features .feature-item {
+            background: var(--secondary-color);
+            padding: 25px;
+            border-left: 3px solid var(--highlight-color);
+            border-radius: 5px;
+            transition: background 0.3s;
+        }
+
+        #features .feature-item:hover {
+            background: #444;
+        }
+
+        #features .feature-item h3 {
+            color: var(--text-color);
+            margin-bottom: 15px;
+            font-size: 1.2em;
+        }
+
+        /* Social Proof Section */
+        #social-proof {
+            background-color: #222;
+        }
+
+        #social-proof p {
+            font-style: italic;
+            text-align: center;
+            font-size: 1.1em;
+            max-width: 800px;
+            margin: 0 auto;
+            border: 1px solid var(--primary-color);
+            padding: 20px;
+            border-radius: 8px;
+        }
+
+        /* Footer */
+        footer {
+            background: #111;
+            color: #aaa;
+            text-align: center;
+            padding: 20px 0;
+        }
+        
+        /* Utility for Flexbox Layout */
+        .flex-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
         }
     </style>
-    <!-- Load Lucide Icons -->
-    <script type="module">
-        import { createIcons, Home, Cpu, Clock, Shield, Shuffle, ListChecks, Terminal, Download, X } from 'https://unpkg.com/lucide@latest/dist/umd/lucide.js';
-        createIcons({ icons: { Home, Cpu, Clock, Shield, Shuffle, ListChecks, Terminal, Download, X } });
-    </script>
 </head>
-<body class="min-h-screen">
+<body>
 
-    <!-- Header / Hero Section -->
-    <header class="py-16 border-b border-gray-700">
-        <div class="container mx-auto px-4 sm:px-6 lg:px-8 text-center">
-            <h1 class="text-4xl sm:text-6xl font-extrabold mb-4">
-                <span class="rust-orange">Rust</span> <span class="text-white">Battlemetrics</span> AFK Tool
-            </h1>
-            <p class="text-xl sm:text-2xl text-gray-400 mb-8 max-w-3xl mx-auto">
-                The smart, automated solution for accumulating Battlemetrics playtime hours on Rust servers.
-            </p>
-            
-            <div class="flex flex-col sm:flex-row justify-center items-center space-y-4 sm:space-y-0 sm:space-x-4">
-                
-                <!-- View on GitHub Button (Updated URL) -->
-                <a href="https://github.com/jlaiii/RUST-BM-AFK" target="_blank"
-                   class="inline-flex items-center justify-center w-full sm:w-auto px-8 py-3 border border-transparent text-base font-medium rounded-lg text-white rust-bg-orange hover:bg-orange-700 transition duration-150 shadow-lg shadow-orange-900/50">
-                    <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor" class="mr-2">
-                        <path d="M12 0c-6.626 0-12 5.373-12 12 0 5.302 3.438 9.809 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.082-.743.082-.729.082-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.833 2.807 1.304 3.492.997.107-.775.418-1.304.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.305-.535-1.524.118-3.176 0 0 1.008-.322 3.301 1.23.957-.266 1.983-.399 3.003-.404 1.02.005 2.046.138 3.003.404 2.292-1.552 3.297-1.23 3.297-1.23.653 1.652.242 2.871.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576c4.765-1.577 8.192-6.084 8.192-11.387c0-6.627-5.373-12-12-12z"/>
-                    </svg>
-                    View on GitHub
-                </a>
-                
-                <!-- Download Script Button (Opens Modal) -->
-                <button id="open-download-modal"
-                        class="inline-flex items-center justify-center w-full sm:w-auto px-8 py-3 border border-orange-600 text-base font-medium rounded-lg text-rust-orange bg-gray-900 hover:bg-gray-800 transition duration-150 shadow-lg shadow-gray-900/50">
-                    <svg data-lucide="download" class="w-5 h-5 mr-2"></svg>
-                    Download Script
-                </button>
-            </div>
-
-            <p class="mt-4 text-sm text-gray-500">
-                Requires Python 3.x and the original Rust game client.
-            </p>
+    <header>
+        <div class="container flex-row">
+            <div class="logo">RUST-<span>BM-AFK</span></div>
+            <nav>
+                <a href="#hero">Home</a>
+                <a href="#features">Features</a>
+                <a href="#social-proof">Why Hours?</a>
+                <a href="https://github.com/jlaiii/RUST-BM-AFK" target="_blank" class="cta-button">GitHub Source</a>
+            </nav>
         </div>
     </header>
 
-    <!-- Features Section -->
-    <section id="features" class="py-20">
-        <div class="container mx-auto px-4 sm:px-6 lg:px-8">
-            <h2 class="text-3xl sm:text-4xl font-bold text-center mb-12 text-white">
-                Core Features & Automation
-            </h2>
-
-            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
-
-                <!-- Feature 1: Server Rotation -->
-                <div class="bg-gray-800 p-6 rounded-xl shadow-xl hover:shadow-2xl transition duration-300 transform hover:scale-[1.02]">
-                    <i data-lucide="shuffle" class="rust-orange w-8 h-8 mb-4"></i>
-                    <h3 class="text-xl font-semibold mb-2 text-white">Intelligent Server Rotation</h3>
-                    <p class="text-gray-400">
-                        Automatically switch between a predefined list of servers within a randomized time range (e.g., 2-3 hours). Mimics human behavior to avoid suspicion and keep playtime diverse across servers.
-                    </p>
-                </div>
-
-                <!-- Feature 2: Stealth Mode -->
-                <div class="bg-gray-800 p-6 rounded-xl shadow-xl hover:shadow-2xl transition duration-300 transform hover:scale-[1.02]">
-                    <i data-lucide="shield" class="rust-orange w-8 h-8 mb-4"></i>
-                    <h3 class="text-xl font-semibold mb-2 text-white">Stealth Mode & Anti-AFK</h3>
-                    <p class="text-gray-400">
-                        Features the optional "Kill after movement" functionality. This ensures your character is downed right after moving, preventing continuous spectating by admins and maintaining a low profile.
-                    </p>
-                </div>
-
-                <!-- Feature 3: Full Automation Cycle -->
-                <div class="bg-gray-800 p-6 rounded-xl shadow-xl hover:shadow-2xl transition duration-300 transform hover:scale-[1.02]">
-                    <i data-lucide="cpu" class="rust-orange w-8 h-8 mb-4"></i>
-                    <h3 class="text-xl font-semibold mb-2 text-white">Full Console Automation</h3>
-                    <p class="text-gray-400">
-                        The tool handles the entire cycle: `client.disconnect`, `client.connect [IP]`, `respawn`, and simulated key presses (W + Space). No manual intervention is required after setup.
-                    </p>
-                </div>
-
-                <!-- Feature 4: Customizable Timing -->
-                <div class="bg-gray-800 p-6 rounded-xl shadow-xl hover:shadow-2xl transition duration-300 transform hover:scale-[1.02]">
-                    <i data-lucide="clock" class="rust-orange w-8 h-8 mb-4"></i>
-                    <h3 class="text-xl font-semibold mb-2 text-white">Adjustable AFK Interval</h3>
-                    <p class="text-gray-400">
-                        Easily customize the time interval between AFK cycles (1, 2, 5, or 10 minutes) directly through the GUI. Optimize the frequency of activity to your preference.
-                    </p>
-                </div>
-
-                <!-- Feature 5: Server Management -->
-                <div class="bg-gray-800 p-6 rounded-xl shadow-xl hover:shadow-2xl transition duration-300 transform hover:scale-[1.02]">
-                    <i data-lucide="list-checks" class="rust-orange w-8 h-8 mb-4"></i>
-                    <h3 class="text-xl font-semibold mb-2 text-white">Integrated Server Manager</h3>
-                    <p class="text-gray-400">
-                        Manage your server list directly in the application. Add, remove, and categorize servers (Premium/Non-Premium) for easy selection and configuration of the rotation list.
-                    </p>
-                </div>
-
-                <!-- Feature 6: Detailed Logging -->
-                <div class="bg-gray-800 p-6 rounded-xl shadow-xl hover:shadow-2xl transition duration-300 transform hover:scale-[1.02]">
-                    <i data-lucide="terminal" class="rust-orange w-8 h-8 mb-4"></i>
-                    <h3 class="text-xl font-semibold mb-2 text-white">Real-Time Status & Logging</h3>
-                    <p class="text-gray-400">
-                        Monitor the tool's activity with a real-time status display and a detailed log file that tracks every disconnect, connect, cycle count, and server switch for complete transparency.
-                    </p>
-                </div>
-
+    <main>
+        <section id="hero">
+            <div class="content">
+                <h1>Stop Grinding. Start Accumulating.</h1>
+                <p>The ultimate, automated AFK tool designed to reliably boost your Rust BattleMetrics playtime and statistical presence.</p>
+                <a href="https://github.com/jlaiii/RUST-BM-AFK" target="_blank" class="cta-button">View Project on GitHub</a>
             </div>
-        </div>
-    </section>
+        </section>
 
-    <!-- Installation Section -->
-    <section id="installation" class="py-16 bg-gray-900">
-        <div class="container mx-auto px-4 sm:px-6 lg:px-8">
-            <h2 class="text-3xl font-bold text-center mb-10 text-white">
-                Installation & Usage
-            </h2>
-            <div class="max-w-4xl mx-auto">
-                <div class="bg-gray-800 p-6 rounded-xl shadow-xl">
-                    <h3 class="text-xl font-semibold mb-4 rust-orange">Step 1: Prerequisites & Download</h3>
-                    <p class="text-gray-400 mb-4">
-                        Ensure you have **Python 3.x** installed. Download the `rust_battlemetrics_hour_adder.py` file from the repository.
-                        <strong class="block mt-2">The script will automatically install necessary dependencies (keyboard, pyautogui) upon its first run.</strong>
-                    </p>
-                    
-                    <h3 class="text-xl font-semibold mb-4 rust-orange">Step 2: Run the Tool</h3>
-                    <p class="text-gray-400 mb-2">
-                        Execute the script from your terminal in the downloaded directory:
-                    </p>
-                    <pre class="bg-black p-3 rounded-lg text-sm overflow-x-auto"><code>python rust_battlemetrics_hour_adder.py</code></pre>
-                    <p class="text-gray-400 mt-4 italic">
-                        The tool will launch a simple, intuitive GUI for server management and control.
-                    </p>
-                </div>
+        <section id="features">
+            <div class="container">
+                <h2>Core Operational Features</h2>
+                <ul class="feature-list">
+                    <li class="feature-item">
+                        <h3>BattleMetrics Hour Accumulation</h3>
+                        <p>The core function. Utilizes a low-level Python automation engine to simulate human activity in Rust, ensuring your session is counted by BattleMetrics without you needing to be present.</p>
+                    </li>
+                    <li class="feature-item">
+                        <h3>Smart Server Rotation Logic</h3>
+                        <p>Automatically rotates between a list of pre-selected servers on a timed interval (e.g., 1-2 hours) to maximize uptime and accrue hours across different environments, helping to avoid suspicion and mimic natural play patterns.</p>
+                    </li>
+                    <li class="feature-item">
+                        <h3>Minimal Activity & Stealth Modes</h3>
+                        <p>Specialized modes to reduce detection risk. Minimal Activity Mode uses longer, 25-minute intervals, and Stealth Mode for rotation connects, kills the player instantly, and waits, ensuring minimal in-game presence.</p>
+                    </li>
+                    <li class="feature-item">
+                        <h3>Full Server Management GUI</h3>
+                        <p>A user-friendly, tabbed graphical interface built with Tkinter for easy management, allowing users to add, remove, and filter server IPs (Premium/Non-Premium) for optimal farming.</p>
+                    </li>
+                    <li class="feature-item">
+                        <h3>Automated Game Management</h3>
+                        <p>Includes features to automatically start Rust via Steam and focus the window upon boot-up. It also supports auto-restarting the game on a set schedule (e.g., every 6 hours) to handle potential game updates or crashes.</p>
+                    </li>
+                    <li class="feature-item">
+                        <h3>Windows Startup Integration</h3>
+                        <p>Configure the tool to begin the hour farming process automatically upon Windows boot, ensuring seamless, 24/7 operation with minimal user intervention.</p>
+                    </li>
+                </ul>
             </div>
-        </div>
-    </section>
+        </section>
 
-    <!-- Footer -->
-    <footer class="py-8 text-center text-gray-500 border-t border-gray-800 mt-12">
-        <p>&copy; 2025 Rust Hour Adder. Built for automation and efficiency.</p>
-        <p class="text-xs mt-2">
-            Use responsibly. Automation tools may violate server-specific rules.
-        </p>
+        <section id="social-proof">
+            <div class="container">
+                <h2>Why Hours Matter: Fit In.</h2>
+                <p>
+                    In the highly competitive world of Rust, your BattleMetrics playtime hours are more than just a number—they are a form of social currency. High-hour players are instantly granted a level of respect and credibility. Adding hours to your account allows you to seamlessly fit in with veteran groups, join high-tier communities that gate membership by playtime, and deter hostile players who perceive high hours as a sign of experience and dedication. Stop feeling excluded and start building the profile you deserve. The time investment for an average player is immense; our tool allows you to close the gap efficiently and realistically.
+                </p>
+            </div>
+        </section>
+    </main>
+
+    <footer>
+        <div class="container">
+            <p>&copy; 2025 RUST-BM-AFK. All rights reserved.</p>
+            <p>Source Code available on GitHub: <a href="https://github.com/jlaiii/RUST-BM-AFK" target="_blank">https://github.com/jlaiii/RUST-BM-AFK</a></p>
+        </div>
     </footer>
-
-    <!-- Download Modal -->
-    <div id="download-modal" class="hidden fixed inset-0 z-50 items-center justify-center bg-black bg-opacity-70 backdrop-blur-sm transition-opacity" onclick="if (event.target.id === 'download-modal') closeModal()">
-        <div class="bg-gray-900 p-8 rounded-xl shadow-2xl max-w-lg w-full m-4 relative border border-gray-700 transform transition-all scale-100">
-            
-            <button id="close-modal-btn" class="absolute top-4 right-4 text-gray-400 hover:text-white transition" onclick="closeModal()">
-                <svg data-lucide="x" class="w-6 h-6"></svg>
-            </button>
-            
-            <h3 class="text-2xl font-bold text-white mb-4 rust-orange">Important Prerequisite</h3>
-            
-            <p class="text-gray-300 mb-6">
-                This tool is a Python script and **requires Python 3.x** to be installed on your system.
-            </p>
-
-            <!-- Python Download Link -->
-            <a href="https://www.python.org/downloads/" target="_blank"
-               class="flex items-center justify-center px-6 py-3 mb-6 bg-gray-700 text-white font-medium rounded-lg hover:bg-gray-600 transition duration-150">
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" class="mr-2">
-                    <path d="M7 10h10v2H7zM7 6h10v2H7zM7 14h6v2H7z"/>
-                    <path d="M12 0C5.373 0 0 5.373 0 12s5.373 12 12 12 12-5.373 12-12S18.627 0 12 0zm-1 20h2v-2h-2v2zm1-3c-3.866 0-7-3.134-7-7s3.134-7 7-7 7 3.134 7 7-3.134 7-7 7zm-5-8c0-2.76 2.24-5 5-5s5 2.24 5 5v2H7v-2z"/>
-                </svg>
-                Download Python Now
-            </a>
-            
-            <div class="flex items-center mb-6">
-                <input id="python-check" type="checkbox" class="w-5 h-5 text-rust-orange border-gray-600 rounded focus:ring-rust-orange bg-gray-700 checked:bg-rust-orange">
-                <label for="python-check" class="ml-3 text-lg font-medium text-white select-none">
-                    I already have Python installed
-                </label>
-            </div>
-
-            <!-- Final Download Button -->
-            <button id="final-download-btn" disabled
-                    class="w-full px-6 py-3 text-white font-semibold rounded-lg bg-green-600 transition duration-150 cursor-not-allowed disabled:opacity-50 disabled:hover:bg-green-600">
-                <svg data-lucide="download" class="w-5 h-5 inline mr-2"></svg>
-                Start Script Download
-            </button>
-        </div>
-    </div>
-
-    <script>
-        const MODAL_ID = 'download-modal';
-        // The raw URL for the script download
-        const DOWNLOAD_URL = 'https://raw.githubusercontent.com/jlaiii/RUST-BM-AFK/refs/heads/main/rust_battlemetrics_hour_adder.py';
-        
-        // Function to close the modal (used by button and outside click)
-        function closeModal() {
-            const modal = document.getElementById(MODAL_ID);
-            if (modal) {
-                modal.classList.add('hidden');
-                modal.classList.remove('flex');
-            }
-        }
-
-        document.addEventListener('DOMContentLoaded', () => {
-            const modal = document.getElementById(MODAL_ID);
-            const openBtn = document.getElementById('open-download-modal');
-            const downloadBtn = document.getElementById('final-download-btn');
-            const pythonCheck = document.getElementById('python-check');
-
-            // 1. Function to open the modal
-            if (openBtn) {
-                openBtn.addEventListener('click', () => {
-                    modal.classList.remove('hidden');
-                    modal.classList.add('flex');
-                });
-            }
-
-            // 2. Toggle download button state based on checkbox
-            if (pythonCheck && downloadBtn) {
-                pythonCheck.addEventListener('change', () => {
-                    const isChecked = pythonCheck.checked;
-                    downloadBtn.disabled = !isChecked;
-                    
-                    // Toggle styling for disabled/enabled state
-                    downloadBtn.classList.toggle('opacity-50', !isChecked);
-                    downloadBtn.classList.toggle('bg-green-600', isChecked);
-                    downloadBtn.classList.toggle('hover:bg-green-700', isChecked);
-                    downloadBtn.classList.toggle('cursor-not-allowed', !isChecked);
-                });
-                // Set initial state
-                pythonCheck.checked = false;
-                downloadBtn.disabled = true;
-                downloadBtn.classList.add('opacity-50');
-            }
-
-            // 3. Handle final download click (Updated to use fetch and Blob for reliable download)
-            if (downloadBtn) {
-                downloadBtn.addEventListener('click', async () => {
-                    if (pythonCheck.checked) {
-                        downloadBtn.textContent = 'Preparing Download...';
-                        downloadBtn.disabled = true;
-                        
-                        try {
-                            const response = await fetch(DOWNLOAD_URL);
-                            if (!response.ok) throw new Error('Network response was not ok');
-                            
-                            // Get the file content as text
-                            const scriptText = await response.text();
-
-                            // Create a Blob from the text content (setting type for Python script)
-                            const blob = new Blob([scriptText], { type: 'text/x-python' });
-                            const url = URL.createObjectURL(blob);
-
-                            // Create a temporary link element to trigger the download
-                            const link = document.createElement('a');
-                            link.href = url;
-                            link.download = 'rust_battlemetrics_hour_adder.py'; // Suggested filename
-                            document.body.appendChild(link);
-                            
-                            // Trigger the download
-                            link.click();
-                            
-                            document.body.removeChild(link);
-                            URL.revokeObjectURL(url); // Clean up the object URL
-
-                            // Close the modal after triggering download
-                            closeModal();
-                        } catch (error) {
-                            console.error('Download failed:', error);
-                            // Display a simple error message instead of an alert
-                            const errorMessage = document.createElement('div');
-                            errorMessage.className = "p-4 bg-red-800 text-white rounded-lg mt-4 text-sm";
-                            errorMessage.textContent = 'Download failed. Please check your connection or visit the GitHub repository directly.';
-                            modal.querySelector('.bg-gray-900').appendChild(errorMessage);
-                        } finally {
-                            downloadBtn.textContent = 'Start Script Download';
-                            // Re-enable the button only if the checkbox is still checked
-                            downloadBtn.disabled = !pythonCheck.checked;
-                        }
-                    }
-                });
-            }
-        });
-    </script>
 
 </body>
 </html>
