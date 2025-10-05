@@ -55,7 +55,7 @@ class RustAFKHourAdder:
     def __init__(self):
         self.root = tk.Tk()
         self.root.title("Rust Battlemetrics AFK Hour Adder Tool")
-        self.root.geometry("650x900")  # Increased height to show GitHub link and version
+        self.root.geometry("650x1000")  # Increased height to show GitHub link and version
         self.root.resizable(True, True)  # Allow resizing so users can adjust if needed
         
         # Create data folder
@@ -68,6 +68,7 @@ class RustAFKHourAdder:
             "pause_time": 60,  # 1 minute in seconds
             "stealth_mode": False,  # Kill player after movement to prevent spectating
             "disable_first_disconnect": False,  # Option to disable first disconnect command
+            "disable_beep": False,  # Option to disable beep sounds
             "server_switching": {
                 "enabled": False,
                 "time_range": "2-3",  # hours
@@ -193,7 +194,7 @@ class RustAFKHourAdder:
         tk.Label(pause_frame, text="AFK Loop Interval:").pack(side="left")
         self.pause_var = tk.StringVar(value="1 min")
         pause_dropdown = ttk.Combobox(pause_frame, textvariable=self.pause_var, 
-                                     values=["1 min", "2 min", "5 min", "10 min"], 
+                                     values=["1 min", "2 min", "5 min", "10 min", "15 min", "20 min"], 
                                      width=10, state="readonly")
         pause_dropdown.pack(side="right")
         
@@ -206,6 +207,11 @@ class RustAFKHourAdder:
                                          variable=self.stealth_var, command=self.on_stealth_mode_change)
         stealth_checkbox.pack(anchor="w")
         
+        # Note about stealth mode
+        stealth_note = tk.Label(stealth_frame, text="Note: Recommended to keep OFF so players can kill you and add to your stats", 
+                               font=("Arial", 8), wraplength=500)
+        stealth_note.pack(anchor="w", padx=20)
+        
         # Disable First Disconnect Setting
         disconnect_frame = tk.Frame(settings_frame)
         disconnect_frame.pack(fill="x", pady=5)
@@ -214,6 +220,15 @@ class RustAFKHourAdder:
         disconnect_checkbox = tk.Checkbutton(disconnect_frame, text="Disable First Disconnect Command", 
                                            variable=self.disable_disconnect_var)
         disconnect_checkbox.pack(anchor="w")
+        
+        # Disable Beep Setting
+        beep_frame = tk.Frame(settings_frame)
+        beep_frame.pack(fill="x", pady=5)
+        
+        self.disable_beep_var = tk.BooleanVar(value=self.settings.get("disable_beep", False))
+        beep_checkbox = tk.Checkbutton(beep_frame, text="Disable Beep Sounds", 
+                                     variable=self.disable_beep_var)
+        beep_checkbox.pack(anchor="w")
         
         # Server Switching Settings
         switch_frame = tk.LabelFrame(settings_frame, text="Auto Server Switching", padx=5, pady=5)
@@ -235,6 +250,14 @@ class RustAFKHourAdder:
         
         tk.Button(switch_frame, text="Select Servers for Rotation", 
                  command=self.select_rotation_servers).pack(pady=5)
+        
+        # Reset Settings Button
+        reset_frame = tk.Frame(settings_frame)
+        reset_frame.pack(fill="x", pady=(10, 5))
+        
+        tk.Button(reset_frame, text="Reset to Default Settings", 
+                 command=self.reset_to_defaults, bg="#FF6B35", fg="white", 
+                 font=("Arial", 10, "bold"), width=25).pack()
         
         # Control Buttons
         control_frame = tk.Frame(self.root)
@@ -289,6 +312,7 @@ class RustAFKHourAdder:
             # Update settings from GUI
             self.settings["stealth_mode"] = self.stealth_var.get()
             self.settings["disable_first_disconnect"] = self.disable_disconnect_var.get()
+            self.settings["disable_beep"] = self.disable_beep_var.get()
             self.settings["server_switching"]["enabled"] = self.switch_enabled_var.get()
             self.settings["server_switching"]["time_range"] = self.time_range_var.get()
             
@@ -296,6 +320,50 @@ class RustAFKHourAdder:
                 json.dump(self.settings, f, indent=2)
         except Exception as e:
             self.log_status(f"Error saving settings: {e}")
+    
+    def reset_to_defaults(self):
+        """Reset all settings to their default values"""
+        # Show confirmation dialog
+        if messagebox.askyesno("Reset Settings", 
+                              "Are you sure you want to reset all settings to their default values?\n\n" +
+                              "This will:\n" +
+                              "• Reset AFK loop interval to 1 minute\n" +
+                              "• Disable stealth mode\n" +
+                              "• Enable first disconnect command\n" +
+                              "• Enable beep sounds\n" +
+                              "• Disable auto server switching\n" +
+                              "• Clear server rotation selection\n\n" +
+                              "This action cannot be undone!"):
+            
+            # Reset settings to defaults
+            self.settings = {
+                "pause_time": 60,  # 1 minute in seconds
+                "stealth_mode": False,
+                "disable_first_disconnect": False,
+                "disable_beep": False,
+                "server_switching": {
+                    "enabled": False,
+                    "time_range": "2-3",
+                    "selected_servers": []
+                }
+            }
+            
+            # Update GUI elements to reflect defaults
+            self.pause_var.set("1 min")
+            self.stealth_var.set(False)
+            self.disable_disconnect_var.set(False)
+            self.disable_beep_var.set(False)
+            self.switch_enabled_var.set(False)
+            self.time_range_var.set("2-3")
+            
+            # Save the reset settings
+            self.save_settings()
+            
+            # Log the reset action
+            self.log_status("Settings reset to default values")
+            
+            # Show success message
+            messagebox.showinfo("Settings Reset", "All settings have been reset to their default values.")
     
     def log_status(self, message):
         """Log status messages to file and print to console"""
@@ -419,6 +487,10 @@ class RustAFKHourAdder:
                 pause_minutes = 5
             elif pause_text == "10 min":
                 pause_minutes = 10
+            elif pause_text == "15 min":
+                pause_minutes = 15
+            elif pause_text == "20 min":
+                pause_minutes = 20
             else:
                 messagebox.showerror("Error", "Please select a valid AFK loop interval")
                 return
@@ -467,11 +539,24 @@ class RustAFKHourAdder:
         self.start_button.config(state="disabled")
         self.stop_button.config(state="normal")
         
-        self.log_status("=== Rust Hour Adder Started ===")
-        self.log_status(f"Selected server: {self.selected_server['name']} ({self.selected_server['ip']})")
-        self.log_status(f"Pause time: {pause_minutes} minutes")
+        self.log_status("=== RUST HOUR ADDER INITIALIZATION ===")
+        self.log_status(f"Session started: {self.start_time.strftime('%Y-%m-%d %H:%M:%S')}")
+        self.log_status(f"Target server: {self.selected_server['name']}")
+        self.log_status(f"Server IP: {self.selected_server['ip']}")
+        self.log_status(f"Premium server: {'Yes' if self.selected_server.get('premium', False) else 'No'}")
+        self.log_status(f"Cycle interval: {pause_minutes} minutes ({pause_minutes * 60} seconds)")
+        self.log_status(f"Stealth mode: {'ENABLED' if self.stealth_var.get() else 'DISABLED'}")
+        self.log_status(f"First disconnect: {'DISABLED' if self.disable_disconnect_var.get() else 'ENABLED'}")
+        
         if self.switch_enabled_var.get():
-            self.log_status(f"Auto server switching enabled: {self.time_range_var.get()} hours")
+            rotation_count = len(self.settings["server_switching"]["selected_servers"])
+            self.log_status(f"Auto server switching: ENABLED")
+            self.log_status(f"   Servers in rotation: {rotation_count}")
+            self.log_status(f"   Switch interval: {self.time_range_var.get()} hours")
+        else:
+            self.log_status(f"Auto server switching: DISABLED")
+        
+        self.log_status("="*60)
         
         self.afk_thread = threading.Thread(target=self.countdown_and_start, daemon=True)
         self.afk_thread.start()
@@ -484,61 +569,109 @@ class RustAFKHourAdder:
         min_hours, max_hours = map(int, time_range.split('-'))
         switch_hours = random.uniform(min_hours, max_hours)
         self.next_server_switch_time = datetime.now() + timedelta(hours=switch_hours)
-        self.log_status(f"Next server switch in {switch_hours:.1f} hours at {self.next_server_switch_time.strftime('%H:%M:%S')}")
+        
+        switch_hours_int = int(switch_hours)
+        switch_minutes = int((switch_hours - switch_hours_int) * 60)
+        
+        self.log_status(f"NEXT SERVER SWITCH SCHEDULED:")
+        self.log_status(f"   Time: {self.next_server_switch_time.strftime('%Y-%m-%d %H:%M:%S')}")
+        self.log_status(f"   Duration: {switch_hours_int}h {switch_minutes}m from now")
+        self.log_status(f"   Random interval: {min_hours}-{max_hours} hours (selected: {switch_hours:.1f}h)")
     
     def switch_to_next_server(self):
         """Switch to the next server in rotation"""
         if not self.settings["server_switching"]["selected_servers"]:
+            self.log_status("WARNING: No servers configured for rotation")
             return
+        
+        switch_start = datetime.now()
+        self.log_status("=== AUTO SERVER SWITCHING INITIATED ===")
         
         # Find current server index in rotation
         current_server_name = self.selected_server['name']
         rotation_servers = self.settings["server_switching"]["selected_servers"]
         
+        self.log_status(f"Current server: {current_server_name}")
+        self.log_status(f"Available servers in rotation: {len(rotation_servers)}")
+        
         # Pick a random different server from rotation
         available_servers = [i for i in rotation_servers if self.servers[i]['name'] != current_server_name]
         if not available_servers:
             available_servers = rotation_servers  # If only one server, use it
+            self.log_status("WARNING: Only one server in rotation, staying on same server")
         
         next_server_index = random.choice(available_servers)
+        old_server = self.selected_server
         self.selected_server = self.servers[next_server_index]
         self.current_server_start_time = datetime.now()
         
-        self.log_status(f"Switching to server: {self.selected_server['name']} ({self.selected_server['ip']})")
+        self.log_status(f"Switching FROM: {old_server['name']} ({old_server['ip']})")
+        self.log_status(f"Switching TO: {self.selected_server['name']} ({self.selected_server['ip']})")
         
         # Disconnect from current server first
-        self.log_status("Opening console (F1)")
+        self.log_status("SWITCH STEP 1: Disconnecting from current server")
+        self.log_status("   Opening console (F1 key)")
         pyautogui.press('f1')
         time.sleep(1)
         
-        self.log_status("Typing: client.disconnect")
+        self.log_status("   Typing command: 'client.disconnect'")
         self.human_type("client.disconnect")
+        self.log_status("   Pressing Enter to execute disconnect")
         pyautogui.press('enter')
         time.sleep(1)
         
-        self.log_status("Closing console (F1)")
+        self.log_status("   Closing console (F1 key)")
         pyautogui.press('f1')
+        self.log_status("   Waiting 2 seconds before reconnecting...")
         time.sleep(2)  # Wait a bit before reconnecting
+        
+        switch_duration = (datetime.now() - switch_start).total_seconds()
+        self.log_status(f"SERVER SWITCH COMPLETED in {switch_duration:.1f}s")
         
         # Setup next switch
         self.setup_next_server_switch()
     
     def countdown_and_start(self):
+        self.log_status("=== STARTING COUNTDOWN SEQUENCE ===")
+        countdown_start = datetime.now()
+        
         # Countdown from 10
         for i in range(10, 0, -1):
             if not self.is_running:
+                self.log_status("Countdown interrupted by user")
                 return
+            
             self.status_label.config(text=f"Starting in {i}... Tab into game window!")
-            self.log_status(f"Countdown: {i} seconds remaining")
+            
+            if i <= 3:
+                self.log_status(f"WARNING: FINAL COUNTDOWN: {i} seconds remaining - MAKE SURE RUST IS ACTIVE WINDOW!")
+            else:
+                self.log_status(f"Countdown: {i} seconds remaining - Please tab into Rust game window")
+            
             time.sleep(1)
         
         if not self.is_running:
+            self.log_status("Countdown cancelled by user")
             return
-            
+        
+        countdown_end = datetime.now()
+        countdown_duration = (countdown_end - countdown_start).total_seconds()
+        
         # Beep to indicate start
-        winsound.Beep(1000, 500)
+        if not self.settings.get("disable_beep", False):
+            try:
+                winsound.Beep(1000, 500)
+                self.log_status(f"START SIGNAL: Beep sound played (1000Hz, 500ms)")
+            except Exception as e:
+                self.log_status(f"WARNING: Could not play start beep: {e}")
+        else:
+            self.log_status("START SIGNAL: Beep sound disabled in settings")
+        
         self.status_label.config(text="Hour Adder Running...")
-        self.log_status("Rust Hour Adder started! (Beep sound played)")
+        self.log_status(f"=== COUNTDOWN COMPLETED in {countdown_duration:.1f}s - RUST HOUR ADDER NOW ACTIVE ===")
+        self.log_status(f"Target Server: {self.selected_server['name']} ({self.selected_server['ip']})")
+        self.log_status(f"Cycle Interval: {self.settings['pause_time'] // 60} minutes")
+        self.log_status(f"Stealth Mode: {'ENABLED' if self.settings['stealth_mode'] else 'DISABLED'}")
         
         # Start the main AFK loop
         self.afk_loop()
@@ -551,113 +684,207 @@ class RustAFKHourAdder:
                 self.log_status(f"=== Starting Hour Farming Cycle #{cycle_count} ===")
                 
                 # Check if we need to switch servers
-                if (self.switch_enabled_var.get() and self.next_server_switch_time and 
-                    datetime.now() >= self.next_server_switch_time):
-                    self.switch_to_next_server()
+                if self.switch_enabled_var.get() and self.next_server_switch_time:
+                    current_time = datetime.now()
+                    time_until_switch = (self.next_server_switch_time - current_time).total_seconds()
+                    
+                    if time_until_switch <= 0:
+                        self.log_status("Server switch time reached - initiating switch")
+                        self.switch_to_next_server()
+                    else:
+                        # Log switch countdown every 10 cycles or if less than 30 minutes remaining
+                        if cycle_count % 10 == 0 or time_until_switch < 1800:
+                            hours_remaining = int(time_until_switch // 3600)
+                            minutes_remaining = int((time_until_switch % 3600) // 60)
+                            self.log_status(f"Next server switch in: {hours_remaining}h {minutes_remaining}m")
+                elif self.switch_enabled_var.get():
+                    self.log_status("WARNING: Server switching enabled but no switch time set")
                 
                 # Step 1: Disconnect from current server first (if not disabled)
                 if not self.settings.get("disable_first_disconnect", False):
-                    self.log_status("Opening console (F1)")
+                    step_start = datetime.now()
+                    self.log_status("STEP 1: Disconnecting from current server")
+                    self.log_status("   Opening console (F1 key)")
                     pyautogui.press('f1')
                     time.sleep(1)
                     
-                    self.log_status("Typing: client.disconnect")
+                    self.log_status("   Typing command: 'client.disconnect'")
                     self.human_type("client.disconnect")
+                    self.log_status("   Pressing Enter to execute disconnect")
                     pyautogui.press('enter')
                     time.sleep(0.5)
                     
                     # Step 2: Close F1 after disconnect
-                    self.log_status("Closing console (F1)")
+                    self.log_status("   Closing console (F1 key)")
                     pyautogui.press('f1')
+                    self.log_status("   Waiting 3 seconds for disconnect to complete...")
                     time.sleep(3)
+                    
+                    step_duration = (datetime.now() - step_start).total_seconds()
+                    self.log_status(f"STEP 1 COMPLETED in {step_duration:.1f}s - Server disconnection finished")
                 else:
-                    self.log_status("Skipping first disconnect (disabled in settings)")
+                    self.log_status("STEP 1 SKIPPED: First disconnect disabled in settings")
                     time.sleep(1)
                 
                 # Step 3: Open F1 and connect to target server
-                self.log_status("Opening console (F1)")
+                step_start = datetime.now()
+                self.log_status("STEP 2: Connecting to target server")
+                self.log_status("   Opening console (F1 key)")
                 pyautogui.press('f1')
                 time.sleep(1)
                 
                 connect_command = f"client.connect {self.selected_server['ip']}"
-                self.log_status(f"Typing: {connect_command}")
+                self.log_status(f"   Typing command: '{connect_command}'")
+                self.log_status(f"   Target: {self.selected_server['name']}")
                 self.human_type(connect_command)
+                self.log_status("   Pressing Enter to execute connection")
                 pyautogui.press('enter')
                 time.sleep(1)
                 
                 # Step 4: Close F1
-                self.log_status("Closing console (F1)")
+                self.log_status("   Closing console (F1 key)")
                 pyautogui.press('f1')
                 
+                step_duration = (datetime.now() - step_start).total_seconds()
+                self.log_status(f"STEP 2 COMPLETED in {step_duration:.1f}s - Connection command sent")
+                
                 # Step 5: Wait 1 minute
-                self.log_status("Waiting 1 minute after connection...")
+                self.log_status("=== Starting 1-minute connection stabilization wait ===")
+                connection_wait_start = datetime.now()
+                
                 for second in range(60):  # 1 minute = 60 seconds
                     if not self.is_running:
+                        self.log_status("AFK loop stopped by user during connection wait")
                         return
                     
-                    # Log every 30 seconds during this wait
-                    if second > 0 and second % 30 == 0:
+                    # Log every 15 seconds during this wait with detailed progress
+                    if second > 0 and second % 15 == 0:
                         remaining_seconds = 60 - second
-                        self.log_status(f"Connection wait: {remaining_seconds} seconds remaining")
+                        elapsed_seconds = second
+                        progress_percent = (second / 60) * 100
+                        
+                        self.log_status(f"Connection wait progress: {elapsed_seconds}s elapsed | "
+                                      f"{remaining_seconds}s remaining | "
+                                      f"{progress_percent:.1f}% complete")
+                    
+                    # Update status every 5 seconds
+                    if second % 5 == 0:
+                        remaining = 60 - second
+                        self.status_label.config(text=f"Connecting... {remaining}s remaining")
                     
                     time.sleep(1)
                 
+                connection_wait_end = datetime.now()
+                connection_wait_duration = (connection_wait_end - connection_wait_start).total_seconds()
+                self.log_status(f"=== Connection wait completed in {connection_wait_duration:.1f} seconds ===")
+                
                 # Step 6: Open F1 and type respawn
-                self.log_status("Opening console (F1)")
+                step_start = datetime.now()
+                self.log_status("STEP 3: Respawning player")
+                self.log_status("   Opening console (F1 key)")
                 pyautogui.press('f1')
                 time.sleep(1)
                 
-                self.log_status("Typing: respawn")
+                self.log_status("   Typing command: 'respawn'")
                 self.human_type("respawn")
+                self.log_status("   Pressing Enter to execute respawn")
                 pyautogui.press('enter')
                 time.sleep(0.5)
                 
                 # Step 7: Close F1
-                self.log_status("Closing console (F1)")
+                self.log_status("   Closing console (F1 key)")
                 pyautogui.press('f1')
                 
+                step_duration = (datetime.now() - step_start).total_seconds()
+                self.log_status(f"STEP 3 COMPLETED in {step_duration:.1f}s - Respawn command executed")
+                
                 # Step 8: Wait 5 seconds
-                self.log_status("Waiting 5 seconds after respawn...")
-                time.sleep(5)
+                self.log_status("STEP 4: Post-respawn stabilization")
+                self.log_status("   Waiting 5 seconds for respawn to complete...")
+                for i in range(5):
+                    if not self.is_running:
+                        return
+                    self.status_label.config(text=f"Respawn wait: {5-i}s remaining")
+                    time.sleep(1)
+                self.log_status("STEP 4 COMPLETED - Respawn stabilization finished")
                 
                 # Step 9: Press spacebar and W
-                self.log_status("Pressing spacebar")
+                step_start = datetime.now()
+                self.log_status("STEP 5: Performing movement actions")
+                self.log_status("   Pressing spacebar (jump)")
                 pyautogui.press('space')
                 time.sleep(1)
                 
-                self.log_status("Pressing and holding W key for 1 second")
+                self.log_status("   Pressing and holding W key for movement...")
                 pyautogui.keyDown('w')
+                self.log_status("   Holding W key for 1 second...")
                 time.sleep(1)
                 pyautogui.keyUp('w')
-                self.log_status("Released W key")
+                self.log_status("   Released W key")
+                
+                step_duration = (datetime.now() - step_start).total_seconds()
+                self.log_status(f"STEP 5 COMPLETED in {step_duration:.1f}s - Movement actions finished")
                 
                 # Stealth Mode: Kill player to prevent spectating
                 if self.settings["stealth_mode"]:
-                    self.log_status("Stealth Mode: Opening console (F1)")
+                    step_start = datetime.now()
+                    self.log_status("STEALTH MODE ACTIVATED - Eliminating player to prevent spectating")
+                    self.log_status("   Opening console (F1 key)")
                     pyautogui.press('f1')
                     time.sleep(1)
                     
-                    self.log_status("Stealth Mode: Typing: kill")
+                    self.log_status("   Typing command: 'kill'")
                     self.human_type("kill")
+                    self.log_status("   Pressing Enter to execute kill command")
                     pyautogui.press('enter')
                     time.sleep(0.5)
                     
-                    self.log_status("Stealth Mode: Closing console (F1)")
+                    self.log_status("   Closing console (F1 key)")
                     pyautogui.press('f1')
-                    self.log_status("Stealth Mode: Player killed to prevent spectating")
+                    
+                    step_duration = (datetime.now() - step_start).total_seconds()
+                    self.log_status(f"STEALTH MODE COMPLETED in {step_duration:.1f}s - Player eliminated successfully")
+                else:
+                    self.log_status("INFO: Stealth mode disabled - Player remains alive")
                 
                 # Wait for the specified pause time before next cycle
                 pause_time = self.settings["pause_time"]
-                self.log_status(f"Waiting {pause_time // 60} minutes {pause_time % 60} seconds before next cycle")
+                self.log_status(f"=== Starting pause period: {pause_time // 60} minutes {pause_time % 60} seconds ===")
                 
                 for second in range(pause_time):
                     if not self.is_running:
+                        self.log_status("AFK loop stopped by user during pause period")
                         return
                     
-                    # Log every minute during pause
-                    if second > 0 and second % 60 == 0:
+                    # Log every 30 seconds during pause with detailed progress
+                    if second > 0 and second % 30 == 0:
                         remaining_minutes = (pause_time - second) // 60
-                        self.log_status(f"Pause: {remaining_minutes} minutes remaining")
+                        remaining_seconds = (pause_time - second) % 60
+                        elapsed_minutes = second // 60
+                        elapsed_seconds = second % 60
+                        progress_percent = (second / pause_time) * 100
+                        
+                        self.log_status(f"Pause progress: {elapsed_minutes}m {elapsed_seconds}s elapsed | "
+                                      f"{remaining_minutes}m {remaining_seconds}s remaining | "
+                                      f"{progress_percent:.1f}% complete")
+                    
+                    # Update status label with countdown
+                    if second % 5 == 0:  # Update every 5 seconds to avoid spam
+                        remaining_total = pause_time - second
+                        remaining_minutes = remaining_total // 60
+                        remaining_seconds = remaining_total % 60
+                        self.status_label.config(text=f"Next cycle in: {remaining_minutes}m {remaining_seconds}s")
+                    
+                    time.sleep(1)
+                
+                self.log_status(f"=== Pause period completed. Cycle #{cycle_count} finished ===")
+                
+                # Log cycle completion stats
+                if cycle_count % 5 == 0:  # Every 5 cycles, show summary
+                    total_elapsed = datetime.now() - self.start_time
+                    hours, remainder = divmod(total_elapsed.total_seconds(), 3600)
+                    minutes, seconds = divmod(remainder, 60)
+                    self.log_status(f"*** MILESTONE: Completed {cycle_count} cycles in {int(hours)}h {int(minutes)}m {int(seconds)}s ***")
                     
                     time.sleep(1)
                     
@@ -668,26 +895,69 @@ class RustAFKHourAdder:
     
     def human_type(self, text):
         """Type text with human-like timing"""
-        for char in text:
+        typing_start = datetime.now()
+        char_count = len(text)
+        
+        for i, char in enumerate(text):
             if not self.is_running:
+                self.log_status(f"WARNING: Typing interrupted at character {i+1}/{char_count}")
                 return
+            
             pyautogui.write(char)
-            # Random delay between 0.05 and 0.15 seconds
-            time.sleep(0.05 + (time.time() % 0.1))
+            # Random delay between 0.05 and 0.15 seconds for human-like typing
+            delay = 0.05 + (time.time() % 0.1)
+            time.sleep(delay)
+        
+        typing_duration = (datetime.now() - typing_start).total_seconds()
+        avg_char_time = typing_duration / char_count if char_count > 0 else 0
+        self.log_status(f"   Typed '{text}' ({char_count} chars in {typing_duration:.2f}s, avg: {avg_char_time:.3f}s/char)")
     
-    def stop_afk(self):
+    def stop_afk(self, play_beep=True):
+        stop_time = datetime.now()
         self.is_running = False
+        
+        # Calculate session statistics
+        if self.start_time:
+            total_session_time = stop_time - self.start_time
+            hours, remainder = divmod(total_session_time.total_seconds(), 3600)
+            minutes, seconds = divmod(remainder, 60)
+            
+            self.log_status("=== RUST HOUR ADDER STOPPED BY USER ===")
+            self.log_status(f"SESSION STATISTICS:")
+            self.log_status(f"   Start time: {self.start_time.strftime('%Y-%m-%d %H:%M:%S')}")
+            self.log_status(f"   Stop time: {stop_time.strftime('%Y-%m-%d %H:%M:%S')}")
+            self.log_status(f"   Total runtime: {int(hours)}h {int(minutes)}m {int(seconds)}s")
+            self.log_status(f"   Server: {self.selected_server['name'] if self.selected_server else 'None'}")
+            self.log_status(f"   Battlemetrics hours added: {int(hours):02d}:{int(minutes):02d}:{int(seconds):02d}")
+        else:
+            self.log_status("Rust Hour Adder stopped by user (no session data)")
+        
+        if self.afk_thread and self.afk_thread.is_alive():
+            self.log_status("Waiting for AFK thread to terminate...")
+            self.afk_thread.join(timeout=2)
+            if self.afk_thread.is_alive():
+                self.log_status("WARNING: AFK thread did not terminate cleanly")
+            else:
+                self.log_status("AFK thread terminated successfully")
+        
         self.start_button.config(state="normal")
         self.stop_button.config(state="disabled")
         self.status_label.config(text="Stopped")
         
-        if self.start_time:
-            total_time = datetime.now() - self.start_time
-            hours, remainder = divmod(total_time.total_seconds(), 3600)
-            minutes, seconds = divmod(remainder, 60)
-            self.log_status(f"=== Rust Hour Adder Stopped ===")
-            self.log_status(f"Total Battlemetrics hours added: {int(hours):02d}:{int(minutes):02d}:{int(seconds):02d}")
-            self.log_status("="*50)
+        # Play stop sound (only if requested and not disabled)
+        if play_beep and not self.settings.get("disable_beep", False):
+            try:
+                winsound.Beep(500, 300)
+                self.log_status("Stop signal: Beep sound played (500Hz, 300ms)")
+            except Exception as e:
+                self.log_status(f"WARNING: Could not play stop beep: {e}")
+        elif not play_beep:
+            self.log_status("Stop signal: Beep sound skipped (program closing)")
+        else:
+            self.log_status("Stop signal: Beep sound disabled in settings")
+        
+        self.log_status("=== SESSION ENDED ===")
+        self.log_status("="*60)
     
     def open_github_link(self):
         """Open the GitHub link in the default web browser"""
@@ -710,7 +980,7 @@ class RustAFKHourAdder:
         self.root.mainloop()
     
     def on_closing(self):
-        self.stop_afk()
+        self.stop_afk(play_beep=False)  # Don't play beep when closing program
         self.root.destroy()
 
 class ServerDialog:
