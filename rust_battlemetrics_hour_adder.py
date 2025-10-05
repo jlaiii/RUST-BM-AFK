@@ -58,7 +58,7 @@ class RustAFKHourAdder:
     def __init__(self):
         self.root = tk.Tk()
         self.root.title("Rust Battlemetrics AFK Hour Adder Tool")
-        self.root.geometry("650x1100")  # Increased height to show GitHub link and version
+        self.root.geometry("900x700")  # Wider and shorter
         self.root.resizable(True, True)  # Allow resizing so users can adjust if needed
         
         # Create data folder
@@ -73,6 +73,10 @@ class RustAFKHourAdder:
             "disable_startup_disconnect": False,  # Option to disable initial disconnect command when starting
             "disable_beep": False,  # Option to disable beep sounds
             "minimal_activity": False,  # Option to enable minimal activity mode (25min + kill after movement)
+            "auto_start_rust": False,  # Option to auto start Rust via Steam
+            "start_at_boot": False,  # Option to start farming at Windows startup
+            "auto_restart_game": False,  # Option to auto restart game for updates
+            "restart_interval": "6h",  # How often to restart the game
             "server_switching": {
                 "enabled": False,
                 "time_range": "1-2",  # hours
@@ -139,171 +143,51 @@ class RustAFKHourAdder:
             self.log_status(f"Error saving servers: {e}")
         
     def create_gui(self):
-        # Title
-        title_label = tk.Label(self.root, text="Rust Battlemetrics AFK Hour Adder Tool", font=("Arial", 16, "bold"))
-        title_label.pack(pady=10)
+        # Main container with padding
+        main_container = tk.Frame(self.root)
+        main_container.pack(fill="both", expand=True, padx=10, pady=10)
         
-        # Battlemetrics Hours Display
-        self.hours_frame = tk.Frame(self.root)
-        self.hours_frame.pack(pady=10)
+        # Top section - Title and Hours
+        top_frame = tk.Frame(main_container)
+        top_frame.pack(fill="x", pady=(0, 10))
+        
+        # Title
+        title_label = tk.Label(top_frame, text="Rust Battlemetrics AFK Hour Adder Tool", 
+                              font=("Arial", 16, "bold"))
+        title_label.pack()
+        
+        # Hours display
+        self.hours_frame = tk.Frame(top_frame)
+        self.hours_frame.pack(pady=5)
         
         tk.Label(self.hours_frame, text="Battlemetrics Hours:", font=("Arial", 12)).pack()
-        self.hours_label = tk.Label(self.hours_frame, text="00:00:00", font=("Arial", 14, "bold"), fg="green")
+        self.hours_label = tk.Label(self.hours_frame, text="00:00:00", 
+                                   font=("Arial", 14, "bold"), fg="green")
         self.hours_label.pack()
         
-        # Server Selection
-        server_frame = tk.LabelFrame(self.root, text="Server Management", padx=10, pady=10)
-        server_frame.pack(pady=10, padx=20, fill="x")
+        # Create notebook for tabs
+        self.notebook = ttk.Notebook(main_container)
+        self.notebook.pack(fill="both", expand=True, pady=(0, 10))
         
-        self.server_var = tk.StringVar()
-        # Filter status label
-        self.filter_status_label = tk.Label(server_frame, text="Showing: All Servers", 
-                                           font=("Arial", 9), fg="blue")
-        self.filter_status_label.pack(pady=(0, 5))
+        # Tab 1: Server Management
+        self.create_server_tab()
         
-        self.server_listbox = tk.Listbox(server_frame, height=6)
-        self.server_listbox.pack(fill="x", pady=5)
+        # Tab 2: Basic Settings
+        self.create_basic_settings_tab()
         
-        server_buttons_frame = tk.Frame(server_frame)
-        server_buttons_frame.pack(fill="x", pady=5)
+        # Tab 3: Automation Settings
+        self.create_automation_tab()
         
-        # First row of buttons
-        buttons_row1 = tk.Frame(server_buttons_frame)
-        buttons_row1.pack(fill="x", pady=2)
+        # Tab 4: Server Switching
+        self.create_server_switching_tab()
         
-        tk.Button(buttons_row1, text="Add Server", command=self.add_server).pack(side="left", padx=5)
-        tk.Button(buttons_row1, text="Remove Server", command=self.remove_server).pack(side="left", padx=5)
-        
-        # Second row of buttons
-        buttons_row2 = tk.Frame(server_buttons_frame)
-        buttons_row2.pack(fill="x", pady=2)
-        
-        tk.Button(buttons_row2, text="Hide Premium", command=self.hide_premium_servers).pack(side="left", padx=5)
-        tk.Button(buttons_row2, text="Hide Non-Premium", command=self.hide_non_premium_servers).pack(side="left", padx=5)
-        tk.Button(buttons_row2, text="Show All", command=self.show_all_servers).pack(side="left", padx=5)
-        
-        # Third row of buttons
-        buttons_row3 = tk.Frame(server_buttons_frame)
-        buttons_row3.pack(fill="x", pady=2)
-        
-        tk.Button(buttons_row3, text="Delete All Premium", command=self.delete_all_premium, bg="#8B0000", fg="white").pack(side="left", padx=5)
-        tk.Button(buttons_row3, text="Delete All Non-Premium", command=self.delete_all_non_premium, bg="#8B0000", fg="white").pack(side="left", padx=5)
-        
-        # Settings
-        settings_frame = tk.LabelFrame(self.root, text="Settings", padx=10, pady=10)
-        settings_frame.pack(pady=10, padx=20, fill="x")
-        
-        pause_frame = tk.Frame(settings_frame)
-        pause_frame.pack(fill="x", pady=5)
-        
-        self.pause_label = tk.Label(pause_frame, text="AFK Loop Interval:")
-        self.pause_label.pack(side="left")
-        self.pause_var = tk.StringVar(value="1 min")
-        self.pause_dropdown = ttk.Combobox(pause_frame, textvariable=self.pause_var, 
-                                          values=["1 min", "2 min", "5 min", "10 min", "15 min", "20 min", "25 min"], 
-                                          width=10, state="readonly")
-        self.pause_dropdown.pack(side="left", padx=(10, 0))
-        
-        # Kill After Movement Setting
-        kill_frame = tk.Frame(settings_frame)
-        kill_frame.pack(fill="x", pady=5)
-        
-        self.kill_after_movement_var = tk.BooleanVar(value=self.settings["kill_after_movement"])
-        self.kill_checkbox = tk.Checkbutton(kill_frame, text="Kill after movement (prevents spectating)", 
-                                           variable=self.kill_after_movement_var, command=self.on_kill_after_movement_change)
-        self.kill_checkbox.pack(anchor="w")
-        
-        # Note about kill after movement
-        kill_note = tk.Label(kill_frame, text="Note: Recommended to keep OFF so players can kill you and add to your stats", 
-                            font=("Arial", 8), wraplength=500)
-        kill_note.pack(anchor="w", padx=20)
-        
-        # Disable Startup Disconnect Setting
-        disconnect_frame = tk.Frame(settings_frame)
-        disconnect_frame.pack(fill="x", pady=5)
-        
-        self.disable_disconnect_var = tk.BooleanVar(value=self.settings.get("disable_startup_disconnect", False))
-        disconnect_checkbox = tk.Checkbutton(disconnect_frame, text="Disable Initial Startup Disconnect Command", 
-                                           variable=self.disable_disconnect_var)
-        disconnect_checkbox.pack(anchor="w")
-        
-        # Disable Beep Setting
-        beep_frame = tk.Frame(settings_frame)
-        beep_frame.pack(fill="x", pady=5)
-        
-        self.disable_beep_var = tk.BooleanVar(value=self.settings.get("disable_beep", False))
-        beep_checkbox = tk.Checkbutton(beep_frame, text="Disable Beep Sounds", 
-                                     variable=self.disable_beep_var)
-        beep_checkbox.pack(anchor="w")
-        
-        # Minimal Activity Setting
-        minimal_frame = tk.Frame(settings_frame)
-        minimal_frame.pack(fill="x", pady=5)
-        
-        self.minimal_activity_var = tk.BooleanVar(value=self.settings.get("minimal_activity", False))
-        minimal_checkbox = tk.Checkbutton(minimal_frame, text="Minimal Activity Mode", 
-                                        variable=self.minimal_activity_var,
-                                        command=self.on_minimal_activity_change)
-        minimal_checkbox.pack(anchor="w")
-        
-        # Note about minimal activity
-        minimal_note = tk.Label(minimal_frame, text="Note: Sets AFK loop to 25 minutes and enables kill after movement for minimal server activity", 
-                               font=("Arial", 8), wraplength=500)
-        minimal_note.pack(anchor="w", padx=20)
-        
-        # Server Switching Settings
-        switch_frame = tk.LabelFrame(settings_frame, text="Auto Server Switching", padx=5, pady=5)
-        switch_frame.pack(fill="x", pady=5)
-        
-        self.switch_enabled_var = tk.BooleanVar(value=self.settings["server_switching"]["enabled"])
-        tk.Checkbutton(switch_frame, text="Enable Auto Server Switching", 
-                      variable=self.switch_enabled_var).pack(anchor="w")
-        
-        # Stealth Mode Checkbox
-        self.stealth_mode_var = tk.BooleanVar(value=self.settings["server_switching"].get("stealth_mode", False))
-        stealth_checkbox = tk.Checkbutton(switch_frame, text="Enable Stealth Mode", 
-                                         variable=self.stealth_mode_var,
-                                         command=self.on_stealth_mode_change)
-        stealth_checkbox.pack(anchor="w", pady=(5, 0))
-        
-        # Stealth mode explanation
-        stealth_note = tk.Label(switch_frame, text="Note: Stays connected for 25 minutes then switches servers, minimal activity, no respawn cycles", 
-                               font=("Arial", 8), wraplength=500)
-        stealth_note.pack(anchor="w", padx=20, pady=(0, 5))
-
-        
-        time_range_frame = tk.Frame(switch_frame)
-        time_range_frame.pack(fill="x", pady=2)
-        
-        self.time_range_label = tk.Label(time_range_frame, text="Switch every:")
-        self.time_range_label.pack(side="left")
-        self.time_range_var = tk.StringVar(value=self.settings["server_switching"]["time_range"])
-        self.time_range_combo = ttk.Combobox(time_range_frame, textvariable=self.time_range_var, 
-                                            values=["1-2", "2-3", "3-6", "6-12"], width=10, state="readonly")
-        self.time_range_combo.pack(side="left", padx=5)
-        self.time_range_hours_label = tk.Label(time_range_frame, text="hours")
-        self.time_range_hours_label.pack(side="left")
-        
-        tk.Button(switch_frame, text="Select Servers for Rotation", 
-                 command=self.select_rotation_servers).pack(pady=5)
-        
-        # Status display for selected rotation servers
-        self.rotation_status_label = tk.Label(switch_frame, text="", 
-                                            font=("Arial", 9), fg="gray", wraplength=400)
-        self.rotation_status_label.pack(pady=(5, 0))
-        self.update_rotation_status()
-        
-        # Reset Settings Button
-        reset_frame = tk.Frame(settings_frame)
-        reset_frame.pack(fill="x", pady=(10, 5))
-        
-        tk.Button(reset_frame, text="Reset to Default Settings", 
-                 command=self.reset_to_defaults, bg="#FF6B35", fg="white", 
-                 font=("Arial", 10, "bold"), width=25).pack()
+        # Bottom section - Control buttons and status
+        bottom_frame = tk.Frame(main_container)
+        bottom_frame.pack(fill="x", pady=(10, 0))
         
         # Control Buttons
-        control_frame = tk.Frame(self.root)
-        control_frame.pack(pady=20)
+        control_frame = tk.Frame(bottom_frame)
+        control_frame.pack(pady=(0, 10))
         
         self.start_button = tk.Button(control_frame, text="Start Hour Farming", command=self.start_afk, 
                                      bg="green", fg="white", font=("Arial", 12, "bold"), width=15)
@@ -313,13 +197,18 @@ class RustAFKHourAdder:
                                     bg="#8B0000", fg="white", font=("Arial", 12, "bold"), width=15, state="disabled")
         self.stop_button.pack(side="left", padx=10)
         
+        # Reset Settings Button
+        tk.Button(control_frame, text="Reset All Settings", 
+                 command=self.reset_to_defaults, bg="#FF6B35", fg="white", 
+                 font=("Arial", 10, "bold"), width=15).pack(side="left", padx=10)
+        
         # Status
-        self.status_label = tk.Label(self.root, text="Ready", font=("Arial", 10), fg="blue")
-        self.status_label.pack(pady=(10, 5))
+        self.status_label = tk.Label(bottom_frame, text="Ready", font=("Arial", 10), fg="blue")
+        self.status_label.pack()
         
         # GitHub Link and Version
-        github_frame = tk.Frame(self.root)
-        github_frame.pack(pady=(5, 10))
+        github_frame = tk.Frame(bottom_frame)
+        github_frame.pack(pady=5)
         
         version_label = tk.Label(github_frame, text="v1.0.0", font=("Arial", 9), fg="gray")
         version_label.pack()
@@ -332,9 +221,270 @@ class RustAFKHourAdder:
         self.update_server_list()
         self.update_timer()
         
-        # Set initial UI state based on stealth mode and minimal activity
+        # Set initial UI state based on stealth mode, minimal activity, and auto restart
         self.on_stealth_mode_change()
         self.on_minimal_activity_change()
+        self.on_auto_restart_change()
+    
+    def create_server_tab(self):
+        """Create the server management tab"""
+        server_frame = ttk.Frame(self.notebook)
+        self.notebook.add(server_frame, text="Server Management")
+        
+        # Main content area
+        content_frame = tk.Frame(server_frame)
+        content_frame.pack(fill="both", expand=True, padx=10, pady=10)
+        
+        # Left side - Server list
+        left_frame = tk.Frame(content_frame)
+        left_frame.pack(side="left", fill="both", expand=True, padx=(0, 10))
+        
+        # Filter status label
+        self.filter_status_label = tk.Label(left_frame, text="Showing: All Servers", 
+                                           font=("Arial", 10), fg="blue")
+        self.filter_status_label.pack(anchor="w", pady=(0, 5))
+        
+        # Server listbox with scrollbar
+        listbox_frame = tk.Frame(left_frame)
+        listbox_frame.pack(fill="both", expand=True)
+        
+        self.server_listbox = tk.Listbox(listbox_frame, font=("Arial", 9))
+        scrollbar = tk.Scrollbar(listbox_frame, orient="vertical", command=self.server_listbox.yview)
+        self.server_listbox.config(yscrollcommand=scrollbar.set)
+        
+        self.server_listbox.pack(side="left", fill="both", expand=True)
+        scrollbar.pack(side="right", fill="y")
+        
+        # Right side - Buttons
+        right_frame = tk.Frame(content_frame)
+        right_frame.pack(side="right", fill="y")
+        
+        # Server management buttons
+        tk.Label(right_frame, text="Server Actions", font=("Arial", 11, "bold")).pack(pady=(0, 10))
+        
+        tk.Button(right_frame, text="Add Server", command=self.add_server, width=15).pack(pady=2)
+        tk.Button(right_frame, text="Remove Server", command=self.remove_server, width=15).pack(pady=2)
+        
+        # Separator
+        tk.Frame(right_frame, height=2, bg="gray").pack(fill="x", pady=10)
+        
+        # Filter buttons
+        tk.Label(right_frame, text="Filter Servers", font=("Arial", 11, "bold")).pack(pady=(0, 10))
+        
+        tk.Button(right_frame, text="Show All", command=self.show_all_servers, width=15).pack(pady=2)
+        tk.Button(right_frame, text="Hide Premium", command=self.hide_premium_servers, width=15).pack(pady=2)
+        tk.Button(right_frame, text="Hide Non-Premium", command=self.hide_non_premium_servers, width=15).pack(pady=2)
+        
+        # Separator
+        tk.Frame(right_frame, height=2, bg="gray").pack(fill="x", pady=10)
+        
+        # Danger zone
+        tk.Label(right_frame, text="Danger Zone", font=("Arial", 11, "bold"), fg="red").pack(pady=(0, 10))
+        
+        tk.Button(right_frame, text="Delete All Premium", command=self.delete_all_premium, 
+                 bg="#8B0000", fg="white", width=18).pack(pady=2)
+        tk.Button(right_frame, text="Delete All Non-Premium", command=self.delete_all_non_premium, 
+                 bg="#8B0000", fg="white", width=18).pack(pady=2)
+    
+    def create_basic_settings_tab(self):
+        """Create the basic settings tab"""
+        settings_frame = ttk.Frame(self.notebook)
+        self.notebook.add(settings_frame, text="Basic Settings")
+        
+        # Main content with two columns
+        content_frame = tk.Frame(settings_frame)
+        content_frame.pack(fill="both", expand=True, padx=10, pady=10)
+        
+        # Left column
+        left_col = tk.Frame(content_frame)
+        left_col.pack(side="left", fill="both", expand=True, padx=(0, 10))
+        
+        # AFK Loop Interval
+        interval_frame = tk.LabelFrame(left_col, text="AFK Loop Settings", padx=10, pady=10)
+        interval_frame.pack(fill="x", pady=(0, 10))
+        
+        pause_frame = tk.Frame(interval_frame)
+        pause_frame.pack(fill="x")
+        
+        self.pause_label = tk.Label(pause_frame, text="Interval:")
+        self.pause_label.pack(side="left")
+        self.pause_var = tk.StringVar(value="1 min")
+        self.pause_dropdown = ttk.Combobox(pause_frame, textvariable=self.pause_var, 
+                                          values=["1 min", "2 min", "5 min", "10 min", "15 min", "20 min", "25 min"], 
+                                          width=12, state="readonly")
+        self.pause_dropdown.pack(side="left", padx=10)
+        
+        # Kill After Movement Setting
+        kill_frame = tk.LabelFrame(left_col, text="Combat Settings", padx=10, pady=10)
+        kill_frame.pack(fill="x", pady=(0, 10))
+        
+        self.kill_after_movement_var = tk.BooleanVar(value=self.settings["kill_after_movement"])
+        self.kill_checkbox = tk.Checkbutton(kill_frame, text="Kill after movement (prevents spectating)", 
+                                           variable=self.kill_after_movement_var, command=self.on_kill_after_movement_change)
+        self.kill_checkbox.pack(anchor="w")
+        
+        kill_note = tk.Label(kill_frame, text="Note: Keep OFF so players can kill you for stats", 
+                            font=("Arial", 8), wraplength=350)
+        kill_note.pack(anchor="w", padx=20, pady=2)
+        
+        # Right column
+        right_col = tk.Frame(content_frame)
+        right_col.pack(side="right", fill="both", expand=True)
+        
+        # System Settings
+        system_frame = tk.LabelFrame(right_col, text="System Settings", padx=10, pady=10)
+        system_frame.pack(fill="x", pady=(0, 10))
+        
+        self.disable_disconnect_var = tk.BooleanVar(value=self.settings.get("disable_startup_disconnect", False))
+        tk.Checkbutton(system_frame, text="Disable startup disconnect command", 
+                      variable=self.disable_disconnect_var).pack(anchor="w", pady=2)
+        
+        self.disable_beep_var = tk.BooleanVar(value=self.settings.get("disable_beep", False))
+        tk.Checkbutton(system_frame, text="Disable beep sounds", 
+                      variable=self.disable_beep_var).pack(anchor="w", pady=2)
+        
+        # Special Modes
+        modes_frame = tk.LabelFrame(right_col, text="Special Modes", padx=10, pady=10)
+        modes_frame.pack(fill="x")
+        
+        self.minimal_activity_var = tk.BooleanVar(value=self.settings.get("minimal_activity", False))
+        self.minimal_checkbox = tk.Checkbutton(modes_frame, text="Minimal Activity Mode", 
+                                              variable=self.minimal_activity_var,
+                                              command=self.on_minimal_activity_change)
+        self.minimal_checkbox.pack(anchor="w", pady=2)
+        
+        minimal_note = tk.Label(modes_frame, text="Sets 25min interval + kill after movement", 
+                               font=("Arial", 8), wraplength=350)
+        minimal_note.pack(anchor="w", padx=20, pady=2)
+    
+    def create_automation_tab(self):
+        """Create the automation settings tab"""
+        auto_frame = ttk.Frame(self.notebook)
+        self.notebook.add(auto_frame, text="Automation")
+        
+        # Main content with two columns
+        content_frame = tk.Frame(auto_frame)
+        content_frame.pack(fill="both", expand=True, padx=10, pady=10)
+        
+        # Left column
+        left_col = tk.Frame(content_frame)
+        left_col.pack(side="left", fill="both", expand=True, padx=(0, 10))
+        
+        # Game Management
+        game_frame = tk.LabelFrame(left_col, text="Game Management", padx=10, pady=10)
+        game_frame.pack(fill="x", pady=(0, 10))
+        
+        self.auto_start_rust_var = tk.BooleanVar(value=self.settings.get("auto_start_rust", False))
+        tk.Checkbutton(game_frame, text="Auto start Rust and focus window", 
+                      variable=self.auto_start_rust_var).pack(anchor="w", pady=2)
+        
+        auto_start_note = tk.Label(game_frame, text="Starts via Steam, waits 1min, then focuses", 
+                                  font=("Arial", 8), wraplength=350)
+        auto_start_note.pack(anchor="w", padx=20, pady=2)
+        
+        # Auto Restart
+        restart_frame = tk.LabelFrame(left_col, text="Auto Restart", padx=10, pady=10)
+        restart_frame.pack(fill="x")
+        
+        self.auto_restart_game_var = tk.BooleanVar(value=self.settings.get("auto_restart_game", False))
+        tk.Checkbutton(restart_frame, text="Auto restart game for updates", 
+                      variable=self.auto_restart_game_var,
+                      command=self.on_auto_restart_change).pack(anchor="w", pady=2)
+        
+        restart_interval_frame = tk.Frame(restart_frame)
+        restart_interval_frame.pack(fill="x", pady=5)
+        
+        self.restart_label = tk.Label(restart_interval_frame, text="Restart every:")
+        self.restart_label.pack(side="left")
+        self.restart_interval_var = tk.StringVar(value=self.settings.get("restart_interval", "6h"))
+        self.restart_dropdown = ttk.Combobox(restart_interval_frame, textvariable=self.restart_interval_var, 
+                                           values=["1h", "2h", "3h", "6h", "8h", "12h", "24h"], width=8, state="readonly")
+        self.restart_dropdown.pack(side="left", padx=10)
+        
+        # Right column
+        right_col = tk.Frame(content_frame)
+        right_col.pack(side="right", fill="both", expand=True)
+        
+        # Startup Settings
+        startup_frame = tk.LabelFrame(right_col, text="Windows Startup", padx=10, pady=10)
+        startup_frame.pack(fill="x")
+        
+        self.start_at_boot_var = tk.BooleanVar(value=self.settings.get("start_at_boot", False))
+        tk.Checkbutton(startup_frame, text="Start farming at Windows startup", 
+                      variable=self.start_at_boot_var).pack(anchor="w", pady=2)
+        
+        boot_note = tk.Label(startup_frame, text="Waits 2min after boot, then starts", 
+                            font=("Arial", 8), wraplength=350)
+        boot_note.pack(anchor="w", padx=20, pady=2)
+    
+    def create_server_switching_tab(self):
+        """Create the server switching tab"""
+        switch_frame = ttk.Frame(self.notebook)
+        self.notebook.add(switch_frame, text="Server Switching")
+        
+        # Main content
+        content_frame = tk.Frame(switch_frame)
+        content_frame.pack(fill="both", expand=True, padx=10, pady=10)
+        
+        # Enable/Disable
+        enable_frame = tk.LabelFrame(content_frame, text="Auto Server Switching", padx=10, pady=10)
+        enable_frame.pack(fill="x", pady=(0, 10))
+        
+        self.switch_enabled_var = tk.BooleanVar(value=self.settings["server_switching"]["enabled"])
+        tk.Checkbutton(enable_frame, text="Enable Auto Server Switching", 
+                      variable=self.switch_enabled_var).pack(anchor="w")
+        
+        # Two column layout for settings
+        settings_container = tk.Frame(content_frame)
+        settings_container.pack(fill="both", expand=True)
+        
+        # Left column - Timing settings
+        left_col = tk.Frame(settings_container)
+        left_col.pack(side="left", fill="both", expand=True, padx=(0, 10))
+        
+        timing_frame = tk.LabelFrame(left_col, text="Timing Settings", padx=10, pady=10)
+        timing_frame.pack(fill="x", pady=(0, 10))
+        
+        time_range_frame = tk.Frame(timing_frame)
+        time_range_frame.pack(fill="x")
+        
+        self.time_range_label = tk.Label(time_range_frame, text="Switch every:")
+        self.time_range_label.pack(side="left")
+        self.time_range_var = tk.StringVar(value=self.settings["server_switching"]["time_range"])
+        self.time_range_combo = ttk.Combobox(time_range_frame, textvariable=self.time_range_var, 
+                                            values=["1-2", "2-3", "3-6", "6-12"], width=10, state="readonly")
+        self.time_range_combo.pack(side="left", padx=10)
+        self.time_range_hours_label = tk.Label(time_range_frame, text="hours")
+        self.time_range_hours_label.pack(side="left")
+        
+        # Stealth Mode
+        stealth_frame = tk.LabelFrame(left_col, text="Stealth Mode", padx=10, pady=10)
+        stealth_frame.pack(fill="x")
+        
+        self.stealth_mode_var = tk.BooleanVar(value=self.settings["server_switching"].get("stealth_mode", False))
+        tk.Checkbutton(stealth_frame, text="Enable Stealth Mode", 
+                      variable=self.stealth_mode_var,
+                      command=self.on_stealth_mode_change).pack(anchor="w")
+        
+        stealth_note = tk.Label(stealth_frame, text="25min sessions, minimal activity, no respawn cycles", 
+                               font=("Arial", 8), wraplength=350)
+        stealth_note.pack(anchor="w", padx=20, pady=2)
+        
+        # Right column - Server selection
+        right_col = tk.Frame(settings_container)
+        right_col.pack(side="right", fill="both", expand=True)
+        
+        selection_frame = tk.LabelFrame(right_col, text="Server Selection", padx=10, pady=10)
+        selection_frame.pack(fill="both", expand=True)
+        
+        tk.Button(selection_frame, text="Select Servers for Rotation", 
+                 command=self.select_rotation_servers, width=25).pack(pady=10)
+        
+        # Status display for selected rotation servers
+        self.rotation_status_label = tk.Label(selection_frame, text="", 
+                                            font=("Arial", 9), fg="gray", wraplength=350, justify="left")
+        self.rotation_status_label.pack(fill="both", expand=True, padx=10)
+        self.update_rotation_status()
         
     def load_settings(self):
         settings_file = os.path.join(self.data_folder, "settings.json")
@@ -395,7 +545,16 @@ class RustAFKHourAdder:
             self.pause_label.config(fg="black")
             self.kill_checkbox.config(state="normal")
     
-
+    def on_auto_restart_change(self):
+        """Handle auto restart checkbox change"""
+        if self.auto_restart_game_var.get():
+            # When auto restart is enabled, enable restart interval dropdown
+            self.restart_dropdown.config(state="readonly")
+            self.restart_label.config(fg="black")
+        else:
+            # When auto restart is disabled, disable restart interval dropdown
+            self.restart_dropdown.config(state="disabled")
+            self.restart_label.config(fg="gray")
     
     def save_settings(self):
         settings_file = os.path.join(self.data_folder, "settings.json")
@@ -405,6 +564,10 @@ class RustAFKHourAdder:
             self.settings["disable_startup_disconnect"] = self.disable_disconnect_var.get()
             self.settings["disable_beep"] = self.disable_beep_var.get()
             self.settings["minimal_activity"] = self.minimal_activity_var.get()
+            self.settings["auto_start_rust"] = self.auto_start_rust_var.get()
+            self.settings["start_at_boot"] = self.start_at_boot_var.get()
+            self.settings["auto_restart_game"] = self.auto_restart_game_var.get()
+            self.settings["restart_interval"] = self.restart_interval_var.get()
             self.settings["server_switching"]["enabled"] = self.switch_enabled_var.get()
             self.settings["server_switching"]["time_range"] = self.time_range_var.get()
             self.settings["server_switching"]["stealth_mode"] = self.stealth_mode_var.get()
@@ -437,6 +600,10 @@ class RustAFKHourAdder:
                 "disable_startup_disconnect": False,
                 "disable_beep": False,
                 "minimal_activity": False,
+                "auto_start_rust": False,
+                "start_at_boot": False,
+                "auto_restart_game": False,
+                "restart_interval": "6h",
                 "server_switching": {
                     "enabled": False,
                     "time_range": "1-2",
@@ -451,6 +618,10 @@ class RustAFKHourAdder:
             self.disable_disconnect_var.set(False)
             self.disable_beep_var.set(False)
             self.minimal_activity_var.set(False)
+            self.auto_start_rust_var.set(False)
+            self.start_at_boot_var.set(False)
+            self.auto_restart_game_var.set(False)
+            self.restart_interval_var.set("6h")
             self.switch_enabled_var.set(False)
             self.time_range_var.set("1-2")
             self.stealth_mode_var.set(False)
@@ -461,9 +632,10 @@ class RustAFKHourAdder:
             # Update rotation status display
             self.update_rotation_status()
             
-            # Update UI state based on reset stealth mode and minimal activity
+            # Update UI state based on reset stealth mode, minimal activity, and auto restart
             self.on_stealth_mode_change()
             self.on_minimal_activity_change()
+            self.on_auto_restart_change()
             
             # Log the reset action
             self.log_status("Settings reset to default values")
@@ -691,10 +863,45 @@ class RustAFKHourAdder:
                 messagebox.showerror("Error", "Invalid server selection")
                 return
         
-        # Show important popup message
-        messagebox.showinfo("IMPORTANT", 
-                           "You MUST tab into Rust after pressing OK!\n\n" +
-                           "Press OK to continue and start the countdown.")
+        # Handle auto start Rust functionality
+        if self.settings.get("auto_start_rust", False):
+            if not self.is_rust_running():
+                self.log_status("AUTOMATION: Rust not running, starting via Steam...")
+                if self.start_rust_via_steam():
+                    self.log_status("AUTOMATION: Waiting 1 minute for Rust to load...")
+                    messagebox.showinfo("Auto Start Rust", 
+                                       "Rust is starting via Steam.\n\n" +
+                                       "Please wait 1 minute for the game to load.\n" +
+                                       "The window will be focused automatically.")
+                    
+                    # Wait 1 minute for Rust to load
+                    for i in range(60):
+                        if not self.is_running:
+                            return
+                        time.sleep(1)
+                    
+                    # Focus the Rust window
+                    self.focus_rust_window()
+                    time.sleep(2)  # Give focus time to take effect
+                else:
+                    messagebox.showerror("Auto Start Failed", 
+                                       "Failed to start Rust via Steam.\n\n" +
+                                       "Please start Rust manually and try again.")
+                    return
+            else:
+                self.log_status("AUTOMATION: Rust already running, focusing window...")
+                self.focus_rust_window()
+                time.sleep(2)
+            
+            # Show different message for auto mode
+            messagebox.showinfo("Ready to Start", 
+                               "Rust window has been focused automatically.\n\n" +
+                               "Press OK to start the countdown.")
+        else:
+            # Show standard message for manual mode
+            messagebox.showinfo("IMPORTANT", 
+                               "You MUST tab into Rust after pressing OK!\n\n" +
+                               "Press OK to continue and start the countdown.")
         
         # Start countdown
         self.is_running = True
@@ -1199,6 +1406,72 @@ class RustAFKHourAdder:
         
         self.log_status("=== STEALTH MODE: Now waiting for server switch time (25 minutes) ===")
         self.log_status("   Player is dead - minimal server activity - accumulating hours silently")
+    
+    def is_rust_running(self):
+        """Check if RustClient.exe is running"""
+        try:
+            import psutil
+            for proc in psutil.process_iter(['pid', 'name']):
+                if proc.info['name'] and 'RustClient.exe' in proc.info['name']:
+                    return True
+            return False
+        except ImportError:
+            self.log_status("WARNING: psutil not installed, cannot check if Rust is running")
+            return False
+        except Exception as e:
+            self.log_status(f"Error checking if Rust is running: {e}")
+            return False
+    
+    def start_rust_via_steam(self):
+        """Start Rust via Steam"""
+        try:
+            self.log_status("AUTOMATION: Starting Rust via Steam...")
+            # Rust's Steam App ID is 252490
+            steam_command = "steam://run/252490"
+            subprocess.Popen(f'start "" "{steam_command}"', shell=True)
+            self.log_status("AUTOMATION: Steam launch command sent")
+            return True
+        except Exception as e:
+            self.log_status(f"ERROR: Failed to start Rust via Steam: {e}")
+            return False
+    
+    def focus_rust_window(self):
+        """Focus the Rust game window"""
+        try:
+            import pygetwindow as gw
+            rust_windows = gw.getWindowsWithTitle("Rust")
+            if rust_windows:
+                rust_window = rust_windows[0]
+                rust_window.activate()
+                self.log_status("AUTOMATION: Rust window focused")
+                return True
+            else:
+                self.log_status("WARNING: Rust window not found")
+                return False
+        except ImportError:
+            self.log_status("WARNING: pygetwindow not installed, cannot focus Rust window")
+            return False
+        except Exception as e:
+            self.log_status(f"ERROR: Failed to focus Rust window: {e}")
+            return False
+    
+    def kill_rust_process(self):
+        """Kill the Rust process"""
+        try:
+            import psutil
+            killed = False
+            for proc in psutil.process_iter(['pid', 'name']):
+                if proc.info['name'] and 'RustClient.exe' in proc.info['name']:
+                    proc.terminate()
+                    killed = True
+                    self.log_status(f"AUTOMATION: Killed Rust process (PID: {proc.info['pid']})")
+            return killed
+        except ImportError:
+            self.log_status("WARNING: psutil not installed, cannot kill Rust process")
+            return False
+        except Exception as e:
+            self.log_status(f"ERROR: Failed to kill Rust process: {e}")
+            return False
     
     def human_type(self, text):
         """Type text with human-like timing"""
