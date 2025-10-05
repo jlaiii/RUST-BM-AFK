@@ -262,6 +262,8 @@ class RustAFKHourAdder:
         # Server management buttons
         tk.Label(right_frame, text="Server Actions", font=("Arial", 11, "bold")).pack(pady=(0, 10))
         
+        tk.Button(right_frame, text="Browse Servers", command=self.open_battlemetrics, 
+                 bg="#4CAF50", fg="white", width=15).pack(pady=2)
         tk.Button(right_frame, text="Add Server", command=self.add_server, width=15).pack(pady=2)
         tk.Button(right_frame, text="Remove Server", command=self.remove_server, width=15).pack(pady=2)
         
@@ -1544,6 +1546,12 @@ class RustAFKHourAdder:
         import webbrowser
         webbrowser.open("https://jlaiii.github.io/RUST-BM-AFK/")
         self.log_status("Opened GitHub link in browser")
+    
+    def open_battlemetrics(self):
+        """Open Battlemetrics Rust servers page in the default web browser"""
+        import webbrowser
+        webbrowser.open("https://www.battlemetrics.com/servers/rust")
+        self.log_status("Opened Battlemetrics server browser in browser")
     
     def update_timer(self):
         if self.is_running and self.start_time:
