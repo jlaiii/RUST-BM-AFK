@@ -107,34 +107,3 @@ The tool creates a `data/` folder with configuration files:
 2. **Rust not launching**: Ensure Steam is running and Rust is in your library
 3. **Server connection fails**: Verify server IP addresses are correct
 4. **Tool not responding**: Use F9 emergency stop and restart
-
-### Performance Tips
-- Use minimal activity mode for better performance
-- Enable auto-restart for long farming sessions
-- Filter server list to reduce memory usage
-- Close unnecessary applications while farming
-
-## Legal Disclaimer
-
-This tool is for educational purposes only. Users are responsible for:
-- Complying with Rust's Terms of Service
-- Following server rules and regulations
-- Understanding the risks of automation tools
-- Using the tool responsibly and ethically
-
-The developers are not responsible for any consequences resulting from the use of this tool, including but not limited to account bans, server kicks, or other penalties.
-
-## Version Information
-
-- **Version**: 1.0.0
-- **Python Version**: 3.7+
-- **Platform**: Windows
-- **Dependencies**: keyboard, pyautogui, tkinter
-
-## Support
-
-For issues, suggestions, or contributions, please visit the project repository or contact the developers.
-
----
-
-**Note**: This tool requires Rust to be running and focused for proper operation. Always ensure you're complying with server rules and game terms of service when using automation tools.
