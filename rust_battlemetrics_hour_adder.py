@@ -1245,7 +1245,7 @@ class RustAFKHourAdder:
                 self.log_status("STEP 5: Performing movement actions")
                 self.log_status("   Pressing spacebar (waking player from sleep)")
                 pyautogui.press('space')
-                time.sleep(1)
+                time.sleep(2)
                 
                 self.log_status("   Pressing and holding W key for movement...")
                 pyautogui.keyDown('w')
