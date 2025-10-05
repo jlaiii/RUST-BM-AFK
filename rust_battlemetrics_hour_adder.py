@@ -181,6 +181,9 @@ class RustAFKHourAdder:
         # Tab 4: Server Switching
         self.create_server_switching_tab()
         
+        # Tab 5: About
+        self.create_about_tab()
+        
         # Bottom section - Control buttons and status
         bottom_frame = tk.Frame(main_container)
         bottom_frame.pack(fill="x", pady=(10, 0))
@@ -487,6 +490,48 @@ class RustAFKHourAdder:
                                             font=("Arial", 9), fg="gray", wraplength=350, justify="left")
         self.rotation_status_label.pack(fill="both", expand=True, padx=10)
         self.update_rotation_status()
+        
+    def create_about_tab(self):
+        """Create the about tab"""
+        about_frame = ttk.Frame(self.notebook)
+        self.notebook.add(about_frame, text="About")
+        
+        # Main content with padding
+        content_frame = tk.Frame(about_frame)
+        content_frame.pack(fill="both", expand=True, padx=20, pady=20)
+        
+        # Purpose
+        purpose_frame = tk.LabelFrame(content_frame, text="Purpose", padx=15, pady=15)
+        purpose_frame.pack(fill="x", pady=(0, 20))
+        
+        purpose_text = tk.Label(purpose_frame, 
+                               text="This tool automates AFK hour farming in Rust that appears on\nBattlemetrics server statistics.\n\n• Build legit looking profiles with accumulated playtime\n• Join higher tier groups that require lots of playtime hours\n• Automatically connects, respawns, and cycles between servers\n• Runs 24/7 with minimal user intervention\n• Supports server switching and stealth modes\n• Real hours that show up on your Battlemetrics profile", 
+                               font=("Arial", 11), justify="left", wraplength=500)
+        purpose_text.pack()
+        
+        # Links section
+        links_frame = tk.LabelFrame(content_frame, text="Community & Support", padx=15, pady=15)
+        links_frame.pack(fill="x")
+        
+        # GitHub link
+        github_frame = tk.Frame(links_frame)
+        github_frame.pack(pady=5)
+        
+        tk.Label(github_frame, text="GitHub:", font=("Arial", 11, "bold")).pack(side="left")
+        github_link = tk.Label(github_frame, text="https://jlaiii.github.io/RUST-BM-AFK/", 
+                              font=("Arial", 11), fg="blue", cursor="hand2")
+        github_link.pack(side="left", padx=(10, 0))
+        github_link.bind("<Button-1>", lambda e: self.open_github_link())
+        
+        # Discord link
+        discord_frame = tk.Frame(links_frame)
+        discord_frame.pack(pady=5)
+        
+        tk.Label(discord_frame, text="Discord:", font=("Arial", 11, "bold")).pack(side="left")
+        discord_link = tk.Label(discord_frame, text="https://discord.gg/a5T2xBhKgt", 
+                               font=("Arial", 11), fg="blue", cursor="hand2")
+        discord_link.pack(side="left", padx=(10, 0))
+        discord_link.bind("<Button-1>", lambda e: self.open_discord_link())
         
     def load_settings(self):
         settings_file = os.path.join(self.data_folder, "settings.json")
@@ -1533,6 +1578,12 @@ class RustAFKHourAdder:
         import webbrowser
         webbrowser.open("https://jlaiii.github.io/RUST-BM-AFK/")
         self.log_status("Opened GitHub link in browser")
+    
+    def open_discord_link(self):
+        """Open the Discord invite link in the default web browser"""
+        import webbrowser
+        webbrowser.open("https://discord.gg/a5T2xBhKgt")
+        self.log_status("Opened Discord invite in browser")
     
     def open_battlemetrics(self):
         """Open Battlemetrics Rust servers page in the default web browser"""
