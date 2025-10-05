@@ -51,11 +51,14 @@ import winsound
 import random
 from datetime import datetime, timedelta
 
+# Disable pyautogui failsafe to prevent accidental mouse movement from stopping the program
+pyautogui.FAILSAFE = False
+
 class RustAFKHourAdder:
     def __init__(self):
         self.root = tk.Tk()
         self.root.title("Rust Battlemetrics AFK Hour Adder Tool")
-        self.root.geometry("650x1000")  # Increased height to show GitHub link and version
+        self.root.geometry("650x1100")  # Increased height to show GitHub link and version
         self.root.resizable(True, True)  # Allow resizing so users can adjust if needed
         
         # Create data folder
@@ -66,12 +69,14 @@ class RustAFKHourAdder:
         # Default settings
         self.settings = {
             "pause_time": 60,  # 1 minute in seconds
-            "stealth_mode": False,  # Kill player after movement to prevent spectating
-            "disable_first_disconnect": False,  # Option to disable first disconnect command
+            "kill_after_movement": False,  # Kill player after movement to prevent spectating
+            "disable_startup_disconnect": False,  # Option to disable initial disconnect command when starting
             "disable_beep": False,  # Option to disable beep sounds
+            "minimal_activity": False,  # Option to enable minimal activity mode (25min + kill after movement)
             "server_switching": {
                 "enabled": False,
-                "time_range": "2-3",  # hours
+                "time_range": "1-2",  # hours
+                "stealth_mode": False,  # Enable stealth mode (connect → kill → wait)
                 "selected_servers": []  # indices of servers to rotate through
             }
         }
@@ -191,33 +196,34 @@ class RustAFKHourAdder:
         pause_frame = tk.Frame(settings_frame)
         pause_frame.pack(fill="x", pady=5)
         
-        tk.Label(pause_frame, text="AFK Loop Interval:").pack(side="left")
+        self.pause_label = tk.Label(pause_frame, text="AFK Loop Interval:")
+        self.pause_label.pack(side="left")
         self.pause_var = tk.StringVar(value="1 min")
-        pause_dropdown = ttk.Combobox(pause_frame, textvariable=self.pause_var, 
-                                     values=["1 min", "2 min", "5 min", "10 min", "15 min", "20 min"], 
-                                     width=10, state="readonly")
-        pause_dropdown.pack(side="right")
+        self.pause_dropdown = ttk.Combobox(pause_frame, textvariable=self.pause_var, 
+                                          values=["1 min", "2 min", "5 min", "10 min", "15 min", "20 min", "25 min"], 
+                                          width=10, state="readonly")
+        self.pause_dropdown.pack(side="left", padx=(10, 0))
         
-        # Stealth Mode Setting
-        stealth_frame = tk.Frame(settings_frame)
-        stealth_frame.pack(fill="x", pady=5)
+        # Kill After Movement Setting
+        kill_frame = tk.Frame(settings_frame)
+        kill_frame.pack(fill="x", pady=5)
         
-        self.stealth_var = tk.BooleanVar(value=self.settings["stealth_mode"])
-        stealth_checkbox = tk.Checkbutton(stealth_frame, text="Stealth Mode (Kill after movement - prevents spectating)", 
-                                         variable=self.stealth_var, command=self.on_stealth_mode_change)
-        stealth_checkbox.pack(anchor="w")
+        self.kill_after_movement_var = tk.BooleanVar(value=self.settings["kill_after_movement"])
+        self.kill_checkbox = tk.Checkbutton(kill_frame, text="Kill after movement (prevents spectating)", 
+                                           variable=self.kill_after_movement_var, command=self.on_kill_after_movement_change)
+        self.kill_checkbox.pack(anchor="w")
         
-        # Note about stealth mode
-        stealth_note = tk.Label(stealth_frame, text="Note: Recommended to keep OFF so players can kill you and add to your stats", 
-                               font=("Arial", 8), wraplength=500)
-        stealth_note.pack(anchor="w", padx=20)
+        # Note about kill after movement
+        kill_note = tk.Label(kill_frame, text="Note: Recommended to keep OFF so players can kill you and add to your stats", 
+                            font=("Arial", 8), wraplength=500)
+        kill_note.pack(anchor="w", padx=20)
         
-        # Disable First Disconnect Setting
+        # Disable Startup Disconnect Setting
         disconnect_frame = tk.Frame(settings_frame)
         disconnect_frame.pack(fill="x", pady=5)
         
-        self.disable_disconnect_var = tk.BooleanVar(value=self.settings.get("disable_first_disconnect", False))
-        disconnect_checkbox = tk.Checkbutton(disconnect_frame, text="Disable First Disconnect Command", 
+        self.disable_disconnect_var = tk.BooleanVar(value=self.settings.get("disable_startup_disconnect", False))
+        disconnect_checkbox = tk.Checkbutton(disconnect_frame, text="Disable Initial Startup Disconnect Command", 
                                            variable=self.disable_disconnect_var)
         disconnect_checkbox.pack(anchor="w")
         
@@ -230,6 +236,21 @@ class RustAFKHourAdder:
                                      variable=self.disable_beep_var)
         beep_checkbox.pack(anchor="w")
         
+        # Minimal Activity Setting
+        minimal_frame = tk.Frame(settings_frame)
+        minimal_frame.pack(fill="x", pady=5)
+        
+        self.minimal_activity_var = tk.BooleanVar(value=self.settings.get("minimal_activity", False))
+        minimal_checkbox = tk.Checkbutton(minimal_frame, text="Minimal Activity Mode", 
+                                        variable=self.minimal_activity_var,
+                                        command=self.on_minimal_activity_change)
+        minimal_checkbox.pack(anchor="w")
+        
+        # Note about minimal activity
+        minimal_note = tk.Label(minimal_frame, text="Note: Sets AFK loop to 25 minutes and enables kill after movement for minimal server activity", 
+                               font=("Arial", 8), wraplength=500)
+        minimal_note.pack(anchor="w", padx=20)
+        
         # Server Switching Settings
         switch_frame = tk.LabelFrame(settings_frame, text="Auto Server Switching", padx=5, pady=5)
         switch_frame.pack(fill="x", pady=5)
@@ -238,18 +259,39 @@ class RustAFKHourAdder:
         tk.Checkbutton(switch_frame, text="Enable Auto Server Switching", 
                       variable=self.switch_enabled_var).pack(anchor="w")
         
+        # Stealth Mode Checkbox
+        self.stealth_mode_var = tk.BooleanVar(value=self.settings["server_switching"].get("stealth_mode", False))
+        stealth_checkbox = tk.Checkbutton(switch_frame, text="Enable Stealth Mode", 
+                                         variable=self.stealth_mode_var,
+                                         command=self.on_stealth_mode_change)
+        stealth_checkbox.pack(anchor="w", pady=(5, 0))
+        
+        # Stealth mode explanation
+        stealth_note = tk.Label(switch_frame, text="Note: Stays connected for 25 minutes then switches servers, minimal activity, no respawn cycles", 
+                               font=("Arial", 8), wraplength=500)
+        stealth_note.pack(anchor="w", padx=20, pady=(0, 5))
+
+        
         time_range_frame = tk.Frame(switch_frame)
         time_range_frame.pack(fill="x", pady=2)
         
-        tk.Label(time_range_frame, text="Switch every:").pack(side="left")
+        self.time_range_label = tk.Label(time_range_frame, text="Switch every:")
+        self.time_range_label.pack(side="left")
         self.time_range_var = tk.StringVar(value=self.settings["server_switching"]["time_range"])
-        time_range_combo = ttk.Combobox(time_range_frame, textvariable=self.time_range_var, 
-                                       values=["1-2", "2-3", "3-6", "6-12"], width=10, state="readonly")
-        time_range_combo.pack(side="left", padx=5)
-        tk.Label(time_range_frame, text="hours").pack(side="left")
+        self.time_range_combo = ttk.Combobox(time_range_frame, textvariable=self.time_range_var, 
+                                            values=["1-2", "2-3", "3-6", "6-12"], width=10, state="readonly")
+        self.time_range_combo.pack(side="left", padx=5)
+        self.time_range_hours_label = tk.Label(time_range_frame, text="hours")
+        self.time_range_hours_label.pack(side="left")
         
         tk.Button(switch_frame, text="Select Servers for Rotation", 
                  command=self.select_rotation_servers).pack(pady=5)
+        
+        # Status display for selected rotation servers
+        self.rotation_status_label = tk.Label(switch_frame, text="", 
+                                            font=("Arial", 9), fg="gray", wraplength=400)
+        self.rotation_status_label.pack(pady=(5, 0))
+        self.update_rotation_status()
         
         # Reset Settings Button
         reset_frame = tk.Frame(settings_frame)
@@ -290,31 +332,83 @@ class RustAFKHourAdder:
         self.update_server_list()
         self.update_timer()
         
+        # Set initial UI state based on stealth mode and minimal activity
+        self.on_stealth_mode_change()
+        self.on_minimal_activity_change()
+        
     def load_settings(self):
         settings_file = os.path.join(self.data_folder, "settings.json")
         try:
             if os.path.exists(settings_file):
                 with open(settings_file, "r") as f:
                     saved_settings = json.load(f)
+                    # Handle migration from old stealth_mode to kill_after_movement
+                    if "stealth_mode" in saved_settings and "kill_after_movement" not in saved_settings:
+                        saved_settings["kill_after_movement"] = saved_settings.pop("stealth_mode")
+
                     self.settings.update(saved_settings)
         except Exception as e:
             self.log_status(f"Error loading settings: {e}")
     
+    def on_kill_after_movement_change(self):
+        """Handle kill after movement checkbox change"""
+        if self.kill_after_movement_var.get():
+            # When kill after movement is enabled, set AFK loop to 10 minutes
+            self.pause_var.set("10 min")
+    
     def on_stealth_mode_change(self):
         """Handle stealth mode checkbox change"""
-        if self.stealth_var.get():
-            # When stealth mode is enabled, set AFK loop to 10 minutes
-            self.pause_var.set("10 min")
+        if self.stealth_mode_var.get():
+            # When stealth mode is enabled, disable time range dropdown
+            self.time_range_combo.config(state="disabled")
+            self.time_range_label.config(fg="gray")
+            self.time_range_hours_label.config(fg="gray")
+        else:
+            # When stealth mode is disabled, enable time range dropdown
+            self.time_range_combo.config(state="readonly")
+            self.time_range_label.config(fg="black")
+            self.time_range_hours_label.config(fg="black")
+    
+    def on_minimal_activity_change(self):
+        """Handle minimal activity checkbox change"""
+        if self.minimal_activity_var.get():
+            # Store current values before changing them
+            self.previous_pause_value = self.pause_var.get()
+            self.previous_kill_value = self.kill_after_movement_var.get()
+            
+            # When minimal activity is enabled, set AFK loop to 25 minutes and enable kill after movement
+            self.pause_var.set("25 min")
+            self.kill_after_movement_var.set(True)
+            
+            # Gray out and disable the controls that are now automatic
+            self.pause_dropdown.config(state="disabled")
+            self.pause_label.config(fg="gray")
+            self.kill_checkbox.config(state="disabled")
+        else:
+            # When minimal activity is disabled, restore previous values and re-enable the controls
+            if hasattr(self, 'previous_pause_value'):
+                self.pause_var.set(self.previous_pause_value)
+            if hasattr(self, 'previous_kill_value'):
+                self.kill_after_movement_var.set(self.previous_kill_value)
+            
+            self.pause_dropdown.config(state="readonly")
+            self.pause_label.config(fg="black")
+            self.kill_checkbox.config(state="normal")
+    
+
     
     def save_settings(self):
         settings_file = os.path.join(self.data_folder, "settings.json")
         try:
             # Update settings from GUI
-            self.settings["stealth_mode"] = self.stealth_var.get()
-            self.settings["disable_first_disconnect"] = self.disable_disconnect_var.get()
+            self.settings["kill_after_movement"] = self.kill_after_movement_var.get()
+            self.settings["disable_startup_disconnect"] = self.disable_disconnect_var.get()
             self.settings["disable_beep"] = self.disable_beep_var.get()
+            self.settings["minimal_activity"] = self.minimal_activity_var.get()
             self.settings["server_switching"]["enabled"] = self.switch_enabled_var.get()
             self.settings["server_switching"]["time_range"] = self.time_range_var.get()
+            self.settings["server_switching"]["stealth_mode"] = self.stealth_mode_var.get()
+            # Note: selected_servers is updated directly in select_rotation_servers() method
             
             with open(settings_file, "w") as f:
                 json.dump(self.settings, f, indent=2)
@@ -328,36 +422,48 @@ class RustAFKHourAdder:
                               "Are you sure you want to reset all settings to their default values?\n\n" +
                               "This will:\n" +
                               "• Reset AFK loop interval to 1 minute\n" +
-                              "• Disable stealth mode\n" +
-                              "• Enable first disconnect command\n" +
+                              "• Disable kill after movement\n" +
+                              "• Enable initial startup disconnect command\n" +
                               "• Enable beep sounds\n" +
                               "• Disable auto server switching\n" +
+                              "• Disable stealth mode\n" +
                               "• Clear server rotation selection\n\n" +
                               "This action cannot be undone!"):
             
             # Reset settings to defaults
             self.settings = {
                 "pause_time": 60,  # 1 minute in seconds
-                "stealth_mode": False,
-                "disable_first_disconnect": False,
+                "kill_after_movement": False,
+                "disable_startup_disconnect": False,
                 "disable_beep": False,
+                "minimal_activity": False,
                 "server_switching": {
                     "enabled": False,
-                    "time_range": "2-3",
+                    "time_range": "1-2",
+                    "stealth_mode": False,
                     "selected_servers": []
                 }
             }
             
             # Update GUI elements to reflect defaults
             self.pause_var.set("1 min")
-            self.stealth_var.set(False)
+            self.kill_after_movement_var.set(False)
             self.disable_disconnect_var.set(False)
             self.disable_beep_var.set(False)
+            self.minimal_activity_var.set(False)
             self.switch_enabled_var.set(False)
-            self.time_range_var.set("2-3")
+            self.time_range_var.set("1-2")
+            self.stealth_mode_var.set(False)
             
             # Save the reset settings
             self.save_settings()
+            
+            # Update rotation status display
+            self.update_rotation_status()
+            
+            # Update UI state based on reset stealth mode and minimal activity
+            self.on_stealth_mode_change()
+            self.on_minimal_activity_change()
             
             # Log the reset action
             self.log_status("Settings reset to default values")
@@ -466,14 +572,48 @@ class RustAFKHourAdder:
             self.log_status(f"Deleted {non_premium_count} non-premium servers")
             messagebox.showinfo("Success", f"Deleted {non_premium_count} non-premium servers")
     
+    def update_rotation_status(self):
+        """Update the rotation status display"""
+        selected_servers = self.settings["server_switching"]["selected_servers"]
+        if selected_servers:
+            count = len(selected_servers)
+            if count <= 3:
+                # Show server names if 3 or fewer
+                server_names = [self.servers[i]['name'] for i in selected_servers if i < len(self.servers)]
+                status_text = f"Rotation servers ({count}): {', '.join(server_names)}"
+            else:
+                # Just show count if more than 3
+                status_text = f"Rotation servers: {count} servers selected"
+        else:
+            status_text = "No servers selected for rotation"
+        
+        self.rotation_status_label.config(text=status_text)
+    
     def select_rotation_servers(self):
         """Dialog to select which servers to include in rotation"""
         dialog = ServerRotationDialog(self.root, self.servers, 
                                      self.settings["server_switching"]["selected_servers"])
+        
+        # Wait for dialog to complete (modal behavior)
+        self.root.wait_window(dialog.dialog)
+        
         if dialog.result is not None:
             self.settings["server_switching"]["selected_servers"] = dialog.result
             self.save_settings()
-            self.log_status(f"Updated server rotation list: {len(dialog.result)} servers selected")
+            self.update_rotation_status()  # Update the status display
+            
+            # Show confirmation message with server names
+            if dialog.result:
+                server_names = [self.servers[i]['name'] for i in dialog.result]
+                server_list = '\n'.join([f"• {name}" for name in server_names])
+                messagebox.showinfo("Rotation Servers Updated", 
+                                   f"Selected {len(dialog.result)} servers for rotation:\n\n{server_list}")
+                self.log_status(f"Updated server rotation list: {len(dialog.result)} servers selected")
+                for i, server_idx in enumerate(dialog.result):
+                    self.log_status(f"  {i+1}. {self.servers[server_idx]['name']}")
+            else:
+                messagebox.showinfo("Rotation Servers Cleared", "No servers selected for rotation")
+                self.log_status("Cleared server rotation list")
     
     def start_afk(self):
         # Validate settings
@@ -491,12 +631,14 @@ class RustAFKHourAdder:
                 pause_minutes = 15
             elif pause_text == "20 min":
                 pause_minutes = 20
+            elif pause_text == "25 min":
+                pause_minutes = 25
             else:
                 messagebox.showerror("Error", "Please select a valid AFK loop interval")
                 return
             
-            # If stealth mode is enabled, set AFK loop to 10 minutes
-            if self.stealth_var.get():
+            # If kill after movement is enabled, set AFK loop to 10 minutes
+            if self.kill_after_movement_var.get():
                 pause_minutes = 10
                 self.pause_var.set("10 min")
                 
@@ -507,22 +649,44 @@ class RustAFKHourAdder:
         
         # Check server selection or rotation setup
         if self.switch_enabled_var.get():
+            # Server switching is enabled - use rotation servers
             if not self.settings["server_switching"]["selected_servers"]:
-                messagebox.showerror("Error", "Please select servers for rotation")
+                messagebox.showerror("Server Rotation Error", 
+                                   "Auto Server Switching is enabled but no servers are selected for rotation.\n\n" +
+                                   "Please:\n" +
+                                   "1. Click 'Select Servers for Rotation' button\n" +
+                                   "2. Choose which servers to rotate between\n" +
+                                   "3. Click OK to save your selection\n\n" +
+                                   "Or disable Auto Server Switching and select a single server from the list.")
+                return
+            # Validate all server indices are still valid
+            invalid_indices = [i for i in self.settings["server_switching"]["selected_servers"] if i >= len(self.servers)]
+            if invalid_indices:
+                messagebox.showerror("Server Rotation Error", 
+                                   "Some servers in your rotation list are no longer valid.\n\n" +
+                                   "This can happen if servers were deleted after being added to rotation.\n\n" +
+                                   "Please reselect servers for rotation.")
                 return
             # Pick first server from rotation
             server_index = self.settings["server_switching"]["selected_servers"][0]
             self.selected_server = self.servers[server_index]
             self.setup_next_server_switch()
+            self.log_status(f"Auto server switching enabled - starting with: {self.selected_server['name']}")
         else:
+            # Server switching is disabled - use manual selection from listbox
             selection = self.server_listbox.curselection()
             if not selection:
-                messagebox.showerror("Error", "Please select a server")
+                messagebox.showerror("Server Selection Error", 
+                                   "No server selected.\n\n" +
+                                   "Please:\n" +
+                                   "1. Click on a server in the list to select it, OR\n" +
+                                   "2. Enable Auto Server Switching and configure rotation servers")
                 return
             # Get the actual server considering current filter
             displayed_servers = self.get_filtered_servers()
             if selection[0] < len(displayed_servers):
                 self.selected_server = displayed_servers[selection[0]]
+                self.log_status(f"Manual server selection: {self.selected_server['name']}")
             else:
                 messagebox.showerror("Error", "Invalid server selection")
                 return
@@ -545,14 +709,17 @@ class RustAFKHourAdder:
         self.log_status(f"Server IP: {self.selected_server['ip']}")
         self.log_status(f"Premium server: {'Yes' if self.selected_server.get('premium', False) else 'No'}")
         self.log_status(f"Cycle interval: {pause_minutes} minutes ({pause_minutes * 60} seconds)")
-        self.log_status(f"Stealth mode: {'ENABLED' if self.stealth_var.get() else 'DISABLED'}")
-        self.log_status(f"First disconnect: {'DISABLED' if self.disable_disconnect_var.get() else 'ENABLED'}")
+        self.log_status(f"Kill after movement: {'ENABLED' if self.kill_after_movement_var.get() else 'DISABLED'}")
+        self.log_status(f"Initial startup disconnect: {'DISABLED' if self.disable_disconnect_var.get() else 'ENABLED'}")
         
         if self.switch_enabled_var.get():
             rotation_count = len(self.settings["server_switching"]["selected_servers"])
             self.log_status(f"Auto server switching: ENABLED")
             self.log_status(f"   Servers in rotation: {rotation_count}")
-            self.log_status(f"   Switch interval: {self.time_range_var.get()} hours")
+            if self.settings["server_switching"]["stealth_mode"]:
+                self.log_status(f"   Switch interval: 25 minutes (STEALTH MODE)")
+            else:
+                self.log_status(f"   Switch interval: {self.time_range_var.get()} hours")
         else:
             self.log_status(f"Auto server switching: DISABLED")
         
@@ -565,18 +732,30 @@ class RustAFKHourAdder:
     
     def setup_next_server_switch(self):
         """Setup the next server switch time"""
-        time_range = self.time_range_var.get()
-        min_hours, max_hours = map(int, time_range.split('-'))
-        switch_hours = random.uniform(min_hours, max_hours)
-        self.next_server_switch_time = datetime.now() + timedelta(hours=switch_hours)
+        self.current_server_start_time = datetime.now()  # Track when this server session started
         
-        switch_hours_int = int(switch_hours)
-        switch_minutes = int((switch_hours - switch_hours_int) * 60)
-        
-        self.log_status(f"NEXT SERVER SWITCH SCHEDULED:")
-        self.log_status(f"   Time: {self.next_server_switch_time.strftime('%Y-%m-%d %H:%M:%S')}")
-        self.log_status(f"   Duration: {switch_hours_int}h {switch_minutes}m from now")
-        self.log_status(f"   Random interval: {min_hours}-{max_hours} hours (selected: {switch_hours:.1f}h)")
+        if self.settings["server_switching"]["stealth_mode"]:
+            # Stealth mode: Switch after 25 minutes
+            self.next_server_switch_time = self.current_server_start_time + timedelta(minutes=25)
+            
+            self.log_status(f"NEXT SERVER SWITCH SCHEDULED (STEALTH MODE):")
+            self.log_status(f"   Time: {self.next_server_switch_time.strftime('%Y-%m-%d %H:%M:%S')}")
+            self.log_status(f"   Duration: 25 minutes from now")
+            self.log_status(f"   Mode: Connect → Kill → Wait → Switch (minimal activity)")
+        else:
+            # Normal mode - use configured time range
+            time_range = self.time_range_var.get()
+            min_hours, max_hours = map(int, time_range.split('-'))
+            switch_hours = random.uniform(min_hours, max_hours)
+            self.next_server_switch_time = self.current_server_start_time + timedelta(hours=switch_hours)
+            
+            switch_hours_int = int(switch_hours)
+            switch_minutes = int((switch_hours - switch_hours_int) * 60)
+            
+            self.log_status(f"NEXT SERVER SWITCH SCHEDULED:")
+            self.log_status(f"   Time: {self.next_server_switch_time.strftime('%Y-%m-%d %H:%M:%S')}")
+            self.log_status(f"   Duration: {switch_hours_int}h {switch_minutes}m from now")
+            self.log_status(f"   Random interval: {min_hours}-{max_hours} hours (selected: {switch_hours:.1f}h)")
     
     def switch_to_next_server(self):
         """Switch to the next server in rotation"""
@@ -671,13 +850,14 @@ class RustAFKHourAdder:
         self.log_status(f"=== COUNTDOWN COMPLETED in {countdown_duration:.1f}s - RUST HOUR ADDER NOW ACTIVE ===")
         self.log_status(f"Target Server: {self.selected_server['name']} ({self.selected_server['ip']})")
         self.log_status(f"Cycle Interval: {self.settings['pause_time'] // 60} minutes")
-        self.log_status(f"Stealth Mode: {'ENABLED' if self.settings['stealth_mode'] else 'DISABLED'}")
+        self.log_status(f"Kill After Movement: {'ENABLED' if self.settings['kill_after_movement'] else 'DISABLED'}")
         
         # Start the main AFK loop
         self.afk_loop()
     
     def afk_loop(self):
         cycle_count = 0
+        need_initial_connection = True
         while self.is_running:
             try:
                 cycle_count += 1
@@ -691,92 +871,135 @@ class RustAFKHourAdder:
                     if time_until_switch <= 0:
                         self.log_status("Server switch time reached - initiating switch")
                         self.switch_to_next_server()
+                        need_initial_connection = True  # Need to connect to new server
                     else:
-                        # Log switch countdown every 10 cycles or if less than 30 minutes remaining
-                        if cycle_count % 10 == 0 or time_until_switch < 1800:
-                            hours_remaining = int(time_until_switch // 3600)
-                            minutes_remaining = int((time_until_switch % 3600) // 60)
+                        # Always show countdown with percentage at start of each cycle
+                        hours_remaining = int(time_until_switch // 3600)
+                        minutes_remaining = int((time_until_switch % 3600) // 60)
+                        
+                        # Calculate percentage progress and elapsed time
+                        if self.current_server_start_time:
+                            total_duration = (self.next_server_switch_time - self.current_server_start_time).total_seconds()
+                            elapsed_duration = (current_time - self.current_server_start_time).total_seconds()
+                            progress_percent = (elapsed_duration / total_duration) * 100
+                            progress_percent = min(100, max(0, progress_percent))  # Clamp between 0-100
+                            
+                            # Format elapsed time
+                            elapsed_hours = int(elapsed_duration // 3600)
+                            elapsed_minutes = int((elapsed_duration % 3600) // 60)
+                            elapsed_seconds = int(elapsed_duration % 60)
+                            
+                            if elapsed_hours > 0:
+                                elapsed_str = f"{elapsed_hours}h {elapsed_minutes}m {elapsed_seconds}s"
+                            elif elapsed_minutes > 0:
+                                elapsed_str = f"{elapsed_minutes}m {elapsed_seconds}s"
+                            else:
+                                elapsed_str = f"{elapsed_seconds}s"
+                            
+                            self.log_status(f"Next server switch in: {hours_remaining}h {minutes_remaining}m ({progress_percent:.1f}% complete)")
+                            self.log_status(f"Connected to current server for: {elapsed_str}")
+                        else:
                             self.log_status(f"Next server switch in: {hours_remaining}h {minutes_remaining}m")
                 elif self.switch_enabled_var.get():
                     self.log_status("WARNING: Server switching enabled but no switch time set")
                 
-                # Step 1: Disconnect from current server first (if not disabled)
-                if not self.settings.get("disable_first_disconnect", False):
+                # Check if we're in stealth mode
+                if (self.switch_enabled_var.get() and 
+                    self.settings["server_switching"]["stealth_mode"]):
+                    
+                    if need_initial_connection:
+                        # Stealth mode: Connect → Kill → Wait for full duration
+                        self.stealth_mode_cycle()
+                        need_initial_connection = False
+                    else:
+                        # In stealth mode, we just wait - no additional cycles needed
+                        self.log_status("STEALTH MODE: Waiting for server switch time...")
+                        time.sleep(30)  # Check every 30 seconds
+                        continue
+                
+                # Only disconnect and connect on first cycle or after server switch (normal mode)
+                if need_initial_connection:
+                    # Step 1: Disconnect from current server first (if not disabled)
+                    if not self.settings.get("disable_startup_disconnect", False):
+                        step_start = datetime.now()
+                        self.log_status("STEP 1: Disconnecting from current server")
+                        self.log_status("   Opening console (F1 key)")
+                        pyautogui.press('f1')
+                        time.sleep(1)
+                        
+                        self.log_status("   Typing command: 'client.disconnect'")
+                        self.human_type("client.disconnect")
+                        self.log_status("   Pressing Enter to execute disconnect")
+                        pyautogui.press('enter')
+                        time.sleep(0.5)
+                        
+                        # Step 2: Close F1 after disconnect
+                        self.log_status("   Closing console (F1 key)")
+                        pyautogui.press('f1')
+                        self.log_status("   Waiting 3 seconds for disconnect to complete...")
+                        time.sleep(3)
+                        
+                        step_duration = (datetime.now() - step_start).total_seconds()
+                        self.log_status(f"STEP 1 COMPLETED in {step_duration:.1f}s - Server disconnection finished")
+                    else:
+                        self.log_status("STEP 1 SKIPPED: Initial startup disconnect disabled in settings")
+                        time.sleep(1)
+                    
+                    # Step 3: Open F1 and connect to target server
                     step_start = datetime.now()
-                    self.log_status("STEP 1: Disconnecting from current server")
+                    self.log_status("STEP 2: Connecting to target server")
                     self.log_status("   Opening console (F1 key)")
                     pyautogui.press('f1')
                     time.sleep(1)
                     
-                    self.log_status("   Typing command: 'client.disconnect'")
-                    self.human_type("client.disconnect")
-                    self.log_status("   Pressing Enter to execute disconnect")
+                    connect_command = f"client.connect {self.selected_server['ip']}"
+                    self.log_status(f"   Typing command: '{connect_command}'")
+                    self.log_status(f"   Target: {self.selected_server['name']}")
+                    self.human_type(connect_command)
+                    self.log_status("   Pressing Enter to execute connection")
                     pyautogui.press('enter')
-                    time.sleep(0.5)
+                    time.sleep(1)
                     
-                    # Step 2: Close F1 after disconnect
+                    # Step 4: Close F1
                     self.log_status("   Closing console (F1 key)")
                     pyautogui.press('f1')
-                    self.log_status("   Waiting 3 seconds for disconnect to complete...")
-                    time.sleep(3)
                     
                     step_duration = (datetime.now() - step_start).total_seconds()
-                    self.log_status(f"STEP 1 COMPLETED in {step_duration:.1f}s - Server disconnection finished")
-                else:
-                    self.log_status("STEP 1 SKIPPED: First disconnect disabled in settings")
-                    time.sleep(1)
-                
-                # Step 3: Open F1 and connect to target server
-                step_start = datetime.now()
-                self.log_status("STEP 2: Connecting to target server")
-                self.log_status("   Opening console (F1 key)")
-                pyautogui.press('f1')
-                time.sleep(1)
-                
-                connect_command = f"client.connect {self.selected_server['ip']}"
-                self.log_status(f"   Typing command: '{connect_command}'")
-                self.log_status(f"   Target: {self.selected_server['name']}")
-                self.human_type(connect_command)
-                self.log_status("   Pressing Enter to execute connection")
-                pyautogui.press('enter')
-                time.sleep(1)
-                
-                # Step 4: Close F1
-                self.log_status("   Closing console (F1 key)")
-                pyautogui.press('f1')
-                
-                step_duration = (datetime.now() - step_start).total_seconds()
-                self.log_status(f"STEP 2 COMPLETED in {step_duration:.1f}s - Connection command sent")
-                
-                # Step 5: Wait 1 minute
-                self.log_status("=== Starting 1-minute connection stabilization wait ===")
-                connection_wait_start = datetime.now()
-                
-                for second in range(60):  # 1 minute = 60 seconds
-                    if not self.is_running:
-                        self.log_status("AFK loop stopped by user during connection wait")
-                        return
+                    self.log_status(f"STEP 2 COMPLETED in {step_duration:.1f}s - Connection command sent")
                     
-                    # Log every 15 seconds during this wait with detailed progress
-                    if second > 0 and second % 15 == 0:
-                        remaining_seconds = 60 - second
-                        elapsed_seconds = second
-                        progress_percent = (second / 60) * 100
+                    # Step 5: Wait 1 minute
+                    self.log_status("=== Starting 1-minute connection stabilization wait ===")
+                    connection_wait_start = datetime.now()
+                    
+                    for second in range(60):  # 1 minute = 60 seconds
+                        if not self.is_running:
+                            self.log_status("AFK loop stopped by user during connection wait")
+                            return
                         
-                        self.log_status(f"Connection wait progress: {elapsed_seconds}s elapsed | "
-                                      f"{remaining_seconds}s remaining | "
-                                      f"{progress_percent:.1f}% complete")
+                        # Log every 15 seconds during this wait with detailed progress
+                        if second > 0 and second % 15 == 0:
+                            remaining_seconds = 60 - second
+                            elapsed_seconds = second
+                            progress_percent = (second / 60) * 100
+                            
+                            self.log_status(f"Connection wait progress: {elapsed_seconds}s elapsed | "
+                                          f"{remaining_seconds}s remaining | "
+                                          f"{progress_percent:.1f}% complete")
+                        
+                        # Update status every 5 seconds
+                        if second % 5 == 0:
+                            remaining = 60 - second
+                            self.status_label.config(text=f"Connecting... {remaining}s remaining")
+                        
+                        time.sleep(1)
                     
-                    # Update status every 5 seconds
-                    if second % 5 == 0:
-                        remaining = 60 - second
-                        self.status_label.config(text=f"Connecting... {remaining}s remaining")
+                    connection_wait_end = datetime.now()
+                    connection_wait_duration = (connection_wait_end - connection_wait_start).total_seconds()
+                    self.log_status(f"=== Connection wait completed in {connection_wait_duration:.1f} seconds ===")
                     
-                    time.sleep(1)
-                
-                connection_wait_end = datetime.now()
-                connection_wait_duration = (connection_wait_end - connection_wait_start).total_seconds()
-                self.log_status(f"=== Connection wait completed in {connection_wait_duration:.1f} seconds ===")
+                    need_initial_connection = False  # Only connect once, then just do respawn cycles
+                else:
+                    self.log_status("STEP 1-2 SKIPPED: Already connected to server, proceeding with respawn cycle")
                 
                 # Step 6: Open F1 and type respawn
                 step_start = datetime.now()
@@ -811,7 +1034,7 @@ class RustAFKHourAdder:
                 # Step 9: Press spacebar and W
                 step_start = datetime.now()
                 self.log_status("STEP 5: Performing movement actions")
-                self.log_status("   Pressing spacebar (jump)")
+                self.log_status("   Pressing spacebar (waking player from sleep)")
                 pyautogui.press('space')
                 time.sleep(1)
                 
@@ -825,10 +1048,10 @@ class RustAFKHourAdder:
                 step_duration = (datetime.now() - step_start).total_seconds()
                 self.log_status(f"STEP 5 COMPLETED in {step_duration:.1f}s - Movement actions finished")
                 
-                # Stealth Mode: Kill player to prevent spectating
-                if self.settings["stealth_mode"]:
+                # Kill After Movement: Kill player to prevent spectating
+                if self.settings["kill_after_movement"]:
                     step_start = datetime.now()
-                    self.log_status("STEALTH MODE ACTIVATED - Eliminating player to prevent spectating")
+                    self.log_status("KILL AFTER MOVEMENT ACTIVATED - Eliminating player to prevent spectating")
                     self.log_status("   Opening console (F1 key)")
                     pyautogui.press('f1')
                     time.sleep(1)
@@ -843,9 +1066,9 @@ class RustAFKHourAdder:
                     pyautogui.press('f1')
                     
                     step_duration = (datetime.now() - step_start).total_seconds()
-                    self.log_status(f"STEALTH MODE COMPLETED in {step_duration:.1f}s - Player eliminated successfully")
+                    self.log_status(f"KILL AFTER MOVEMENT COMPLETED in {step_duration:.1f}s - Player eliminated successfully")
                 else:
-                    self.log_status("INFO: Stealth mode disabled - Player remains alive")
+                    self.log_status("INFO: Kill after movement disabled - Player remains alive")
                 
                 # Wait for the specified pause time before next cycle
                 pause_time = self.settings["pause_time"]
@@ -892,6 +1115,90 @@ class RustAFKHourAdder:
                 error_msg = f"Error in hour farming loop: {e}"
                 self.log_status(error_msg)
                 time.sleep(1)
+    
+    def stealth_mode_cycle(self):
+        """Execute a stealth mode cycle: Connect → Kill → Wait"""
+        self.log_status("=== STEALTH MODE CYCLE ===")
+        
+        # Step 1: Disconnect from current server first (if not disabled)
+        if not self.settings.get("disable_startup_disconnect", False):
+            step_start = datetime.now()
+            self.log_status("STEALTH STEP 1: Disconnecting from current server")
+            self.log_status("   Opening console (F1 key)")
+            pyautogui.press('f1')
+            time.sleep(1)
+            
+            self.log_status("   Typing command: 'client.disconnect'")
+            self.human_type("client.disconnect")
+            self.log_status("   Pressing Enter to execute disconnect")
+            pyautogui.press('enter')
+            time.sleep(0.5)
+            
+            self.log_status("   Closing console (F1 key)")
+            pyautogui.press('f1')
+            self.log_status("   Waiting 3 seconds for disconnect to complete...")
+            time.sleep(3)
+            
+            step_duration = (datetime.now() - step_start).total_seconds()
+            self.log_status(f"STEALTH STEP 1 COMPLETED in {step_duration:.1f}s - Server disconnection finished")
+        else:
+            self.log_status("STEALTH STEP 1 SKIPPED: Initial startup disconnect disabled in settings")
+            time.sleep(1)
+        
+        # Step 2: Connect to target server
+        step_start = datetime.now()
+        self.log_status("STEALTH STEP 2: Connecting to target server")
+        self.log_status("   Opening console (F1 key)")
+        pyautogui.press('f1')
+        time.sleep(1)
+        
+        connect_command = f"client.connect {self.selected_server['ip']}"
+        self.log_status(f"   Typing command: '{connect_command}'")
+        self.log_status(f"   Target: {self.selected_server['name']}")
+        self.human_type(connect_command)
+        self.log_status("   Pressing Enter to execute connection")
+        pyautogui.press('enter')
+        time.sleep(1)
+        
+        self.log_status("   Closing console (F1 key)")
+        pyautogui.press('f1')
+        
+        step_duration = (datetime.now() - step_start).total_seconds()
+        self.log_status(f"STEALTH STEP 2 COMPLETED in {step_duration:.1f}s - Connection command sent")
+        
+        # Step 3: Wait for connection to stabilize
+        self.log_status("STEALTH STEP 3: Connection stabilization wait (30 seconds)")
+        for second in range(30):
+            if not self.is_running:
+                return
+            if second % 10 == 0 and second > 0:
+                remaining = 30 - second
+                self.log_status(f"   Connection wait: {remaining}s remaining")
+            time.sleep(1)
+        
+        self.log_status("STEALTH STEP 3 COMPLETED - Connection stabilized")
+        
+        # Step 4: Kill player immediately (stealth mode)
+        step_start = datetime.now()
+        self.log_status("STEALTH STEP 4: Eliminating player for stealth mode")
+        self.log_status("   Opening console (F1 key)")
+        pyautogui.press('f1')
+        time.sleep(1)
+        
+        self.log_status("   Typing command: 'kill'")
+        self.human_type("kill")
+        self.log_status("   Pressing Enter to execute kill command")
+        pyautogui.press('enter')
+        time.sleep(0.5)
+        
+        self.log_status("   Closing console (F1 key)")
+        pyautogui.press('f1')
+        
+        step_duration = (datetime.now() - step_start).total_seconds()
+        self.log_status(f"STEALTH STEP 4 COMPLETED in {step_duration:.1f}s - Player eliminated for stealth mode")
+        
+        self.log_status("=== STEALTH MODE: Now waiting for server switch time (25 minutes) ===")
+        self.log_status("   Player is dead - minimal server activity - accumulating hours silently")
     
     def human_type(self, text):
         """Type text with human-like timing"""
@@ -1114,7 +1421,12 @@ class ServerRotationDialog:
                 selected.append(i)
         
         if not selected:
-            messagebox.showerror("Error", "Please select at least one server")
+            # Allow clearing selection but warn user
+            if messagebox.askyesno("Clear Selection", 
+                                  "No servers selected. This will clear the rotation list.\n\n" +
+                                  "Are you sure you want to continue?"):
+                self.result = []
+                self.dialog.destroy()
             return
         
         self.result = selected
