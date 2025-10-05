@@ -122,12 +122,24 @@
             transition: background-color 0.3s, transform 0.3s;
             border: none;
             cursor: pointer;
+            margin: 0 10px; /* Space out buttons */
+        }
+        
+        .cta-button.secondary {
+            background: #444;
+            color: var(--text-color);
+            border: 1px solid var(--primary-color);
         }
 
         .cta-button:hover {
             background-color: var(--highlight-color);
             color: #111;
             transform: scale(1.05);
+        }
+
+        .cta-button.secondary:hover {
+            background-color: var(--primary-color);
+            color: var(--background-color);
         }
 
         /* Section Styling */
@@ -212,6 +224,7 @@
                 <a href="#hero">Home</a>
                 <a href="#features">Features</a>
                 <a href="#social-proof">Why Hours?</a>
+                <a href="https://discord.gg/a5T2xBhKgt" target="_blank">Discord</a>
                 <a href="https://github.com/jlaiii/RUST-BM-AFK" target="_blank" class="cta-button">GitHub Source</a>
             </nav>
         </div>
@@ -222,7 +235,10 @@
             <div class="content">
                 <h1>Stop Grinding. Start Accumulating.</h1>
                 <p>The ultimate, automated AFK tool designed to reliably boost your Rust BattleMetrics playtime and statistical presence.</p>
-                <a href="https://github.com/jlaiii/RUST-BM-AFK" target="_blank" class="cta-button">View Project on GitHub</a>
+                <div>
+                    <a href="https://github.com/jlaiii/RUST-BM-AFK" target="_blank" class="cta-button">View Project on GitHub</a>
+                    <a href="https://discord.gg/a5T2xBhKgt" target="_blank" class="cta-button secondary">Join Our Discord</a>
+                </div>
             </div>
         </section>
 
@@ -272,6 +288,7 @@
         <div class="container">
             <p>&copy; 2025 RUST-BM-AFK. All rights reserved.</p>
             <p>Source Code available on GitHub: <a href="https://github.com/jlaiii/RUST-BM-AFK" target="_blank">https://github.com/jlaiii/RUST-BM-AFK</a></p>
+            <p>Community and Support on Discord: <a href="https://discord.gg/a5T2xBhKgt" target="_blank">https://discord.gg/a5T2xBhKgt</a></p>
         </div>
     </footer>
 
