@@ -14,7 +14,9 @@ def check_and_install_dependencies():
     """Check and install required packages"""
     required_packages = {
         'keyboard': 'keyboard==0.13.5',
-        'pyautogui': 'pyautogui==0.9.54'
+        'pyautogui': 'pyautogui==0.9.54',
+        'pygetwindow': 'pygetwindow==0.0.9',
+        'psutil': 'psutil==5.9.0'
     }
     
     missing_packages = []
@@ -70,10 +72,12 @@ class RustAFKHourAdder:
         self.settings = {
             "pause_time": 60,  # 1 minute in seconds
             "kill_after_movement": False,  # Kill player after movement to prevent spectating
-            "disable_startup_disconnect": False,  # Option to disable initial disconnect command when starting
+            "disable_startup_disconnect": True,  # Option to disable initial disconnect command when starting
             "disable_beep": False,  # Option to disable beep sounds
             "minimal_activity": False,  # Option to enable minimal activity mode (25min + kill after movement)
             "auto_start_rust": False,  # Option to auto start Rust via Steam
+            "rust_load_time": "1 min",  # How long to wait for Rust to load
+            "connection_wait_time": "1 min",  # How long to wait for connection to stabilize
             "start_at_boot": False,  # Option to start farming at Windows startup
             "auto_restart_game": False,  # Option to auto restart game for updates
             "restart_interval": "6h",  # How often to restart the game
@@ -328,6 +332,24 @@ class RustAFKHourAdder:
                                           width=12, state="readonly")
         self.pause_dropdown.pack(side="left", padx=10)
         
+        # Connection Wait Time Setting
+        connection_frame = tk.LabelFrame(left_col, text="Connection Settings", padx=10, pady=10)
+        connection_frame.pack(fill="x", pady=(0, 10))
+        
+        connection_wait_frame = tk.Frame(connection_frame)
+        connection_wait_frame.pack(fill="x")
+        
+        tk.Label(connection_wait_frame, text="Connection wait time:").pack(side="left")
+        self.connection_wait_time_var = tk.StringVar(value=self.settings.get("connection_wait_time", "1 min"))
+        self.connection_wait_time_dropdown = ttk.Combobox(connection_wait_frame, textvariable=self.connection_wait_time_var, 
+                                                         values=["45 sec", "1 min", "1m 30s", "2 min"], 
+                                                         width=8, state="readonly")
+        self.connection_wait_time_dropdown.pack(side="left", padx=10)
+        
+        connection_note = tk.Label(connection_frame, text="Time to wait for server connection to stabilize", 
+                                  font=("Arial", 8), wraplength=350)
+        connection_note.pack(anchor="w", padx=20, pady=2)
+        
         # Kill After Movement Setting
         kill_frame = tk.LabelFrame(left_col, text="Combat Settings", padx=10, pady=10)
         kill_frame.pack(fill="x", pady=(0, 10))
@@ -349,7 +371,7 @@ class RustAFKHourAdder:
         system_frame = tk.LabelFrame(right_col, text="System Settings", padx=10, pady=10)
         system_frame.pack(fill="x", pady=(0, 10))
         
-        self.disable_disconnect_var = tk.BooleanVar(value=self.settings.get("disable_startup_disconnect", False))
+        self.disable_disconnect_var = tk.BooleanVar(value=self.settings.get("disable_startup_disconnect", True))
         tk.Checkbutton(system_frame, text="Disable startup disconnect command", 
                       variable=self.disable_disconnect_var).pack(anchor="w", pady=2)
         
@@ -392,7 +414,18 @@ class RustAFKHourAdder:
         tk.Checkbutton(game_frame, text="Auto start Rust and focus window", 
                       variable=self.auto_start_rust_var).pack(anchor="w", pady=2)
         
-        auto_start_note = tk.Label(game_frame, text="Starts via Steam, waits 1min, then focuses", 
+        # Rust load time setting
+        load_time_frame = tk.Frame(game_frame)
+        load_time_frame.pack(fill="x", pady=5)
+        
+        tk.Label(load_time_frame, text="Rust load time:").pack(side="left")
+        self.rust_load_time_var = tk.StringVar(value=self.settings.get("rust_load_time", "1 min"))
+        self.rust_load_time_dropdown = ttk.Combobox(load_time_frame, textvariable=self.rust_load_time_var, 
+                                                   values=["30 sec", "1 min", "2 min", "3 min", "4 min", "5 min"], 
+                                                   width=8, state="readonly")
+        self.rust_load_time_dropdown.pack(side="left", padx=10)
+        
+        auto_start_note = tk.Label(game_frame, text="Starts via Steam, waits for load time, then focuses", 
                                   font=("Arial", 8), wraplength=350)
         auto_start_note.pack(anchor="w", padx=20, pady=2)
         
@@ -480,7 +513,7 @@ class RustAFKHourAdder:
                       variable=self.stealth_mode_var,
                       command=self.on_stealth_mode_change).pack(anchor="w")
         
-        stealth_note = tk.Label(stealth_frame, text="25min sessions, minimal activity, no respawn cycles", 
+        stealth_note = tk.Label(stealth_frame, text="19min sessions, minimal activity, no respawn cycles", 
                                font=("Arial", 8), wraplength=350)
         stealth_note.pack(anchor="w", padx=20, pady=2)
         
@@ -621,6 +654,8 @@ class RustAFKHourAdder:
             self.settings["disable_beep"] = self.disable_beep_var.get()
             self.settings["minimal_activity"] = self.minimal_activity_var.get()
             self.settings["auto_start_rust"] = self.auto_start_rust_var.get()
+            self.settings["rust_load_time"] = self.rust_load_time_var.get()
+            self.settings["connection_wait_time"] = self.connection_wait_time_var.get()
             self.settings["start_at_boot"] = self.start_at_boot_var.get()
             self.settings["auto_restart_game"] = self.auto_restart_game_var.get()
             self.settings["restart_interval"] = self.restart_interval_var.get()
@@ -653,10 +688,12 @@ class RustAFKHourAdder:
             self.settings = {
                 "pause_time": 60,  # 1 minute in seconds
                 "kill_after_movement": False,
-                "disable_startup_disconnect": False,
+                "disable_startup_disconnect": True,
                 "disable_beep": False,
                 "minimal_activity": False,
                 "auto_start_rust": False,
+                "rust_load_time": "1 min",
+                "connection_wait_time": "1 min",
                 "start_at_boot": False,
                 "auto_restart_game": False,
                 "restart_interval": "6h",
@@ -671,10 +708,12 @@ class RustAFKHourAdder:
             # Update GUI elements to reflect defaults
             self.pause_var.set("1 min")
             self.kill_after_movement_var.set(False)
-            self.disable_disconnect_var.set(False)
+            self.disable_disconnect_var.set(True)
             self.disable_beep_var.set(False)
             self.minimal_activity_var.set(False)
             self.auto_start_rust_var.set(False)
+            self.rust_load_time_var.set("1 min")
+            self.connection_wait_time_var.set("1 min")
             self.start_at_boot_var.set(False)
             self.auto_restart_game_var.set(False)
             self.restart_interval_var.set("6h")
@@ -833,14 +872,10 @@ class RustAFKHourAdder:
             # Show confirmation message with server names
             if dialog.result:
                 server_names = [self.servers[i]['name'] for i in dialog.result]
-                server_list = '\n'.join([f"• {name}" for name in server_names])
-                messagebox.showinfo("Rotation Servers Updated", 
-                                   f"Selected {len(dialog.result)} servers for rotation:\n\n{server_list}")
                 self.log_status(f"Updated server rotation list: {len(dialog.result)} servers selected")
                 for i, server_idx in enumerate(dialog.result):
                     self.log_status(f"  {i+1}. {self.servers[server_idx]['name']}")
             else:
-                messagebox.showinfo("Rotation Servers Cleared", "No servers selected for rotation")
                 self.log_status("Cleared server rotation list")
     
     def start_afk(self):
@@ -900,6 +935,7 @@ class RustAFKHourAdder:
             self.selected_server = self.servers[server_index]
             self.setup_next_server_switch()
             self.log_status(f"Auto server switching enabled - starting with: {self.selected_server['name']}")
+            self.log_status("AUTOMATION: Server selection complete, proceeding to automation setup...")
         else:
             # Server switching is disabled - use manual selection from listbox
             selection = self.server_listbox.curselection()
@@ -920,44 +956,97 @@ class RustAFKHourAdder:
                 return
         
         # Handle auto start Rust functionality
-        if self.settings.get("auto_start_rust", False):
-            if not self.is_rust_running():
-                self.log_status("AUTOMATION: Rust not running, starting via Steam...")
+        auto_start_enabled = self.settings.get("auto_start_rust", False)
+        self.log_status(f"AUTOMATION: Auto start Rust setting: {auto_start_enabled}")
+        if auto_start_enabled:
+            self.log_status("AUTOMATION: Checking if Rust is running...")
+            rust_running = self.is_rust_running()
+            self.log_status(f"AUTOMATION: Rust running status: {rust_running}")
+            if not rust_running:
+                # 5-second countdown before starting Rust
+                for i in range(5, 0, -1):
+                    self.status_label.config(text=f"Starting Rust in {i} seconds...")
+                    self.root.update()
+                    time.sleep(1)
+                
+                # Now start Rust
+                self.status_label.config(text="Starting Rust via Steam...")
+                self.root.update()
+                
+                self.log_status("AUTOMATION: Starting Rust via Steam...")
                 if self.start_rust_via_steam():
-                    self.log_status("AUTOMATION: Waiting 1 minute for Rust to load...")
-                    messagebox.showinfo("Auto Start Rust", 
-                                       "Rust is starting via Steam.\n\n" +
-                                       "Please wait 1 minute for the game to load.\n" +
-                                       "The window will be focused automatically.")
                     
-                    # Wait 1 minute for Rust to load
-                    for i in range(60):
-                        if not self.is_running:
-                            return
+                    # Get load time from settings and convert to seconds
+                    load_time_text = self.rust_load_time_var.get()
+                    if load_time_text == "30 sec":
+                        load_time_seconds = 30
+                    elif load_time_text == "1 min":
+                        load_time_seconds = 60
+                    elif load_time_text == "2 min":
+                        load_time_seconds = 120
+                    elif load_time_text == "3 min":
+                        load_time_seconds = 180
+                    elif load_time_text == "4 min":
+                        load_time_seconds = 240
+                    elif load_time_text == "5 min":
+                        load_time_seconds = 300
+                    else:
+                        load_time_seconds = 60  # Default to 1 minute
+                    
+                    # Update status during wait
+                    self.status_label.config(text=f"Waiting {load_time_text} for Rust to load...")
+                    self.root.update()
+                    self.log_status(f"AUTOMATION: Waiting {load_time_text} for Rust to load...")
+                    
+                    # Wait for Rust to load
+                    for i in range(load_time_seconds):
+                        remaining = load_time_seconds - i
+                        self.status_label.config(text=f"Waiting for Rust to load... ({remaining}s remaining)")
+                        self.root.update()
                         time.sleep(1)
                     
                     # Focus the Rust window
-                    self.focus_rust_window()
+                    self.status_label.config(text="Focusing Rust window...")
+                    self.root.update()
+                    if self.focus_rust_window():
+                        self.log_status("AUTOMATION: Rust window focused successfully")
+                        self.status_label.config(text="Rust window focused - Starting automation...")
+                    else:
+                        self.log_status("WARNING: Could not focus Rust window - continuing anyway")
+                        self.status_label.config(text="Could not focus window - Starting automation anyway...")
+                    self.root.update()
                     time.sleep(2)  # Give focus time to take effect
                 else:
                     messagebox.showerror("Auto Start Failed", 
                                        "Failed to start Rust via Steam.\n\n" +
                                        "Please start Rust manually and try again.")
+                    self.status_label.config(text="Failed to start Rust")
                     return
             else:
                 self.log_status("AUTOMATION: Rust already running, focusing window...")
-                self.focus_rust_window()
+                self.status_label.config(text="Rust already running - Focusing window...")
+                self.root.update()
+                if self.focus_rust_window():
+                    self.log_status("AUTOMATION: Rust window focused successfully")
+                    self.status_label.config(text="Rust window focused - Starting automation...")
+                else:
+                    self.log_status("WARNING: Could not focus Rust window - continuing anyway")
+                    self.status_label.config(text="Could not focus window - Starting automation anyway...")
+                self.root.update()
                 time.sleep(2)
             
-            # Show different message for auto mode
-            messagebox.showinfo("Ready to Start", 
-                               "Rust window has been focused automatically.\n\n" +
-                               "Press OK to start the countdown.")
+            # Log that automation is continuing automatically
+            self.log_status("AUTOMATION: Continuing automatically - no user interaction required")
+            self.status_label.config(text="Automation starting...")
+            self.root.update()
         else:
             # Show standard message for manual mode
             messagebox.showinfo("IMPORTANT", 
                                "You MUST tab into Rust after pressing OK!\n\n" +
                                "Press OK to continue and start the countdown.")
+        
+        # Log that we're proceeding to start the main loop
+        self.log_status("AUTOMATION: Proceeding to start main AFK loop...")
         
         # Start countdown
         self.is_running = True
@@ -980,7 +1069,7 @@ class RustAFKHourAdder:
             self.log_status(f"Auto server switching: ENABLED")
             self.log_status(f"   Servers in rotation: {rotation_count}")
             if self.settings["server_switching"]["stealth_mode"]:
-                self.log_status(f"   Switch interval: 25 minutes (STEALTH MODE)")
+                self.log_status(f"   Switch interval: 19 minutes (STEALTH MODE)")
             else:
                 self.log_status(f"   Switch interval: {self.time_range_var.get()} hours")
         else:
@@ -997,13 +1086,13 @@ class RustAFKHourAdder:
         """Setup the next server switch time"""
         self.current_server_start_time = datetime.now()  # Track when this server session started
         
-        if self.settings["server_switching"]["stealth_mode"]:
-            # Stealth mode: Switch after 25 minutes
-            self.next_server_switch_time = self.current_server_start_time + timedelta(minutes=25)
+        if self.stealth_mode_var.get():
+            # Stealth mode: Switch after 19 minutes
+            self.next_server_switch_time = self.current_server_start_time + timedelta(minutes=19)
             
             self.log_status(f"NEXT SERVER SWITCH SCHEDULED (STEALTH MODE):")
             self.log_status(f"   Time: {self.next_server_switch_time.strftime('%Y-%m-%d %H:%M:%S')}")
-            self.log_status(f"   Duration: 25 minutes from now")
+            self.log_status(f"   Duration: 19 minutes from now")
             self.log_status(f"   Mode: Connect → Kill → Wait → Switch (minimal activity)")
         else:
             # Normal mode - use configured time range
@@ -1064,8 +1153,8 @@ class RustAFKHourAdder:
         
         self.log_status("   Closing console (F1 key)")
         pyautogui.press('f1')
-        self.log_status("   Waiting 2 seconds before reconnecting...")
-        time.sleep(2)  # Wait a bit before reconnecting
+        self.log_status("   Waiting 5 seconds for disconnect to complete...")
+        time.sleep(5)  # Wait for disconnect to complete
         
         switch_duration = (datetime.now() - switch_start).total_seconds()
         self.log_status(f"SERVER SWITCH COMPLETED in {switch_duration:.1f}s")
@@ -1119,6 +1208,16 @@ class RustAFKHourAdder:
         self.afk_loop()
     
     def afk_loop(self):
+        """
+        IMPORTANT: Disconnect/connect logic:
+        - Disconnect: ONLY on first cycle (if "disable startup disconnect" is unchecked)
+        - Connect: EVERY CYCLE (handles WiFi drops, network issues, server restarts)
+        - Connection wait: EVERY CYCLE (ensures stable connection before respawn/movement)
+        - Server switching: Handled separately with its own disconnect/connect logic
+        
+        NOTE: Connect command MUST happen every cycle because there's no way to detect
+        if the player is actually connected to the server or not.
+        """
         cycle_count = 0
         while self.is_running:
             try:
@@ -1172,9 +1271,11 @@ class RustAFKHourAdder:
                     self.stealth_mode_cycle()
                     continue
                 
-                # Always disconnect and connect to server every cycle for reliability
-                # Step 1: Disconnect from current server first (if not disabled)
-                if not self.settings.get("disable_startup_disconnect", False):
+                # Step 1: Disconnect from current server (ONLY on first cycle if not disabled)
+                # The disconnect command should ONLY happen:
+                # 1. First cycle (if "disable startup disconnect" is unchecked)
+                # 2. When switching servers (handled separately in server switching logic)
+                if cycle_count == 1 and not self.settings.get("disable_startup_disconnect", False):
                     step_start = datetime.now()
                     self.log_status("STEP 1: Disconnecting from current server")
                     self.log_status("   Opening console (F1 key)")
@@ -1190,16 +1291,19 @@ class RustAFKHourAdder:
                     # Step 2: Close F1 after disconnect
                     self.log_status("   Closing console (F1 key)")
                     pyautogui.press('f1')
-                    self.log_status("   Waiting 3 seconds for disconnect to complete...")
-                    time.sleep(3)
+                    self.log_status("   Waiting 5 seconds for disconnect to complete...")
+                    time.sleep(5)
                     
                     step_duration = (datetime.now() - step_start).total_seconds()
                     self.log_status(f"STEP 1 COMPLETED in {step_duration:.1f}s - Server disconnection finished")
                 else:
-                    self.log_status("STEP 1 SKIPPED: Initial startup disconnect disabled in settings")
-                    time.sleep(1)
+                    if cycle_count == 1:
+                        self.log_status("STEP 1 SKIPPED: Initial startup disconnect disabled in settings")
+                    # No disconnect needed for subsequent cycles
                 
-                # Step 3: Open F1 and connect to target server
+                # Step 2: Connect to target server (EVERY CYCLE for reliability)
+                # MUST happen every cycle to handle WiFi drops, network issues, server restarts, etc.
+                # There's no way to detect if player is actually connected, so always reconnect
                 step_start = datetime.now()
                 self.log_status("STEP 2: Connecting to target server")
                 self.log_status("   Opening console (F1 key)")
@@ -1210,31 +1314,47 @@ class RustAFKHourAdder:
                 self.log_status(f"   Typing command: '{connect_command}'")
                 self.log_status(f"   Target: {self.selected_server['name']}")
                 self.human_type(connect_command)
+                time.sleep(1)  # Wait after typing
                 self.log_status("   Pressing Enter to execute connection")
                 pyautogui.press('enter')
-                time.sleep(1)
+                time.sleep(1)  # Wait after pressing enter
                 
-                # Step 4: Close F1
+                # Close F1
                 self.log_status("   Closing console (F1 key)")
                 pyautogui.press('f1')
+                time.sleep(1)  # Wait after closing console
                 
                 step_duration = (datetime.now() - step_start).total_seconds()
                 self.log_status(f"STEP 2 COMPLETED in {step_duration:.1f}s - Connection command sent")
                 
-                # Step 5: Wait 1 minute for connection to stabilize
-                self.log_status("=== Starting 1-minute connection stabilization wait ===")
+                # Step 3: Wait for connection to stabilize (EVERY CYCLE for reliability)
+                # Connection wait needed every cycle to ensure stable connection before respawn/movement
+                # Get connection wait time from settings and convert to seconds
+                wait_time_text = self.connection_wait_time_var.get()
+                if wait_time_text == "45 sec":
+                    wait_time_seconds = 45
+                elif wait_time_text == "1 min":
+                    wait_time_seconds = 60
+                elif wait_time_text == "1m 30s":
+                    wait_time_seconds = 90
+                elif wait_time_text == "2 min":
+                    wait_time_seconds = 120
+                else:
+                    wait_time_seconds = 60  # Default to 1 minute
+                
+                self.log_status(f"=== Starting {wait_time_text} connection stabilization wait ===")
                 connection_wait_start = datetime.now()
                 
-                for second in range(60):  # 1 minute = 60 seconds
+                for second in range(wait_time_seconds):
                     if not self.is_running:
                         self.log_status("AFK loop stopped by user during connection wait")
                         return
                     
                     # Log every 15 seconds during this wait with detailed progress
                     if second > 0 and second % 15 == 0:
-                        remaining_seconds = 60 - second
+                        remaining_seconds = wait_time_seconds - second
                         elapsed_seconds = second
-                        progress_percent = (second / 60) * 100
+                        progress_percent = (second / wait_time_seconds) * 100
                         
                         self.log_status(f"Connection wait progress: {elapsed_seconds}s elapsed | "
                                       f"{remaining_seconds}s remaining | "
@@ -1242,7 +1362,7 @@ class RustAFKHourAdder:
                     
                     # Update status every 5 seconds
                     if second % 5 == 0:
-                        remaining = 60 - second
+                        remaining = wait_time_seconds - second
                         self.status_label.config(text=f"Connecting... {remaining}s remaining")
                     
                     time.sleep(1)
@@ -1260,13 +1380,15 @@ class RustAFKHourAdder:
                 
                 self.log_status("   Typing command: 'respawn'")
                 self.human_type("respawn")
+                time.sleep(1)  # Wait after typing
                 self.log_status("   Pressing Enter to execute respawn")
                 pyautogui.press('enter')
-                time.sleep(0.5)
+                time.sleep(1)  # Wait after pressing enter
                 
                 # Step 7: Close F1
                 self.log_status("   Closing console (F1 key)")
                 pyautogui.press('f1')
+                time.sleep(1)  # Wait after closing console
                 
                 step_duration = (datetime.now() - step_start).total_seconds()
                 self.log_status(f"STEP 3 COMPLETED in {step_duration:.1f}s - Respawn command executed")
@@ -1386,8 +1508,8 @@ class RustAFKHourAdder:
             
             self.log_status("   Closing console (F1 key)")
             pyautogui.press('f1')
-            self.log_status("   Waiting 3 seconds for disconnect to complete...")
-            time.sleep(3)
+            self.log_status("   Waiting 5 seconds for disconnect to complete...")
+            time.sleep(5)
             
             step_duration = (datetime.now() - step_start).total_seconds()
             self.log_status(f"STEALTH STEP 1 COMPLETED in {step_duration:.1f}s - Server disconnection finished")
@@ -1400,29 +1522,44 @@ class RustAFKHourAdder:
         self.log_status("STEALTH STEP 2: Connecting to target server")
         self.log_status("   Opening console (F1 key)")
         pyautogui.press('f1')
-        time.sleep(1)
+        time.sleep(1)  # Wait after opening console
         
         connect_command = f"client.connect {self.selected_server['ip']}"
         self.log_status(f"   Typing command: '{connect_command}'")
         self.log_status(f"   Target: {self.selected_server['name']}")
         self.human_type(connect_command)
+        time.sleep(1)  # Wait after typing
         self.log_status("   Pressing Enter to execute connection")
         pyautogui.press('enter')
-        time.sleep(1)
+        time.sleep(1)  # Wait after pressing enter
         
         self.log_status("   Closing console (F1 key)")
         pyautogui.press('f1')
+        time.sleep(1)  # Wait after closing console
         
         step_duration = (datetime.now() - step_start).total_seconds()
         self.log_status(f"STEALTH STEP 2 COMPLETED in {step_duration:.1f}s - Connection command sent")
         
         # Step 3: Wait for connection to stabilize
-        self.log_status("STEALTH STEP 3: Connection stabilization wait (30 seconds)")
-        for second in range(30):
+        # Get connection wait time from settings and convert to seconds
+        wait_time_text = self.connection_wait_time_var.get()
+        if wait_time_text == "45 sec":
+            wait_time_seconds = 45
+        elif wait_time_text == "1 min":
+            wait_time_seconds = 60
+        elif wait_time_text == "1m 30s":
+            wait_time_seconds = 90
+        elif wait_time_text == "2 min":
+            wait_time_seconds = 120
+        else:
+            wait_time_seconds = 60  # Default to 1 minute
+        
+        self.log_status(f"STEALTH STEP 3: Connection stabilization wait ({wait_time_text})")
+        for second in range(wait_time_seconds):
             if not self.is_running:
                 return
             if second % 10 == 0 and second > 0:
-                remaining = 30 - second
+                remaining = wait_time_seconds - second
                 self.log_status(f"   Connection wait: {remaining}s remaining")
             time.sleep(1)
         
@@ -1433,21 +1570,23 @@ class RustAFKHourAdder:
         self.log_status("STEALTH STEP 4: Eliminating player for stealth mode")
         self.log_status("   Opening console (F1 key)")
         pyautogui.press('f1')
-        time.sleep(1)
+        time.sleep(1)  # Wait after opening console
         
         self.log_status("   Typing command: 'kill'")
         self.human_type("kill")
+        time.sleep(1)  # Wait after typing
         self.log_status("   Pressing Enter to execute kill command")
         pyautogui.press('enter')
-        time.sleep(0.5)
+        time.sleep(1)  # Wait after pressing enter
         
         self.log_status("   Closing console (F1 key)")
         pyautogui.press('f1')
+        time.sleep(1)  # Wait after closing console
         
         step_duration = (datetime.now() - step_start).total_seconds()
         self.log_status(f"STEALTH STEP 4 COMPLETED in {step_duration:.1f}s - Player eliminated for stealth mode")
         
-        self.log_status("=== STEALTH MODE: Now waiting for server switch time (25 minutes) ===")
+        self.log_status("=== STEALTH MODE: Now waiting for server switch time (19 minutes) ===")
         self.log_status("   Player is dead - minimal server activity - accumulating hours silently")
     
     def is_rust_running(self):
@@ -1459,8 +1598,13 @@ class RustAFKHourAdder:
                     return True
             return False
         except ImportError:
-            self.log_status("WARNING: psutil not installed, cannot check if Rust is running")
-            return False
+            self.log_status("ERROR: psutil package not installed - installing now...")
+            if install_package("psutil==5.9.0"):
+                self.log_status("SUCCESS: psutil installed, retrying Rust detection...")
+                return self.is_rust_running()  # Retry after installation
+            else:
+                self.log_status("ERROR: Failed to install psutil - assuming Rust is not running")
+                return False
         except Exception as e:
             self.log_status(f"Error checking if Rust is running: {e}")
             return False
@@ -1486,14 +1630,27 @@ class RustAFKHourAdder:
             if rust_windows:
                 rust_window = rust_windows[0]
                 rust_window.activate()
-                self.log_status("AUTOMATION: Rust window focused")
+                self.log_status("AUTOMATION: Rust window focused successfully")
                 return True
             else:
-                self.log_status("WARNING: Rust window not found")
+                self.log_status("WARNING: Rust window not found - make sure Rust is running")
+                # Try alternative window titles
+                alt_titles = ["RustClient", "Rust Client"]
+                for title in alt_titles:
+                    alt_windows = gw.getWindowsWithTitle(title)
+                    if alt_windows:
+                        alt_windows[0].activate()
+                        self.log_status(f"AUTOMATION: Found and focused window with title: {title}")
+                        return True
                 return False
         except ImportError:
-            self.log_status("WARNING: pygetwindow not installed, cannot focus Rust window")
-            return False
+            self.log_status("ERROR: pygetwindow package not installed - installing now...")
+            if install_package("pygetwindow==0.0.9"):
+                self.log_status("SUCCESS: pygetwindow installed, retrying window focus...")
+                return self.focus_rust_window()  # Retry after installation
+            else:
+                self.log_status("ERROR: Failed to install pygetwindow - window focusing disabled")
+                return False
         except Exception as e:
             self.log_status(f"ERROR: Failed to focus Rust window: {e}")
             return False
@@ -1510,8 +1667,13 @@ class RustAFKHourAdder:
                     self.log_status(f"AUTOMATION: Killed Rust process (PID: {proc.info['pid']})")
             return killed
         except ImportError:
-            self.log_status("WARNING: psutil not installed, cannot kill Rust process")
-            return False
+            self.log_status("ERROR: psutil package not installed - installing now...")
+            if install_package("psutil==5.9.0"):
+                self.log_status("SUCCESS: psutil installed, retrying process kill...")
+                return self.kill_rust_process()  # Retry after installation
+            else:
+                self.log_status("ERROR: Failed to install psutil - process management disabled")
+                return False
         except Exception as e:
             self.log_status(f"ERROR: Failed to kill Rust process: {e}")
             return False
