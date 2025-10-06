@@ -209,17 +209,26 @@ class RustAFKHourAdder:
         self.status_label = tk.Label(bottom_frame, text="Ready", font=("Arial", 10), fg="blue")
         self.status_label.pack()
         
-        # GitHub Link and Version
-        github_frame = tk.Frame(bottom_frame)
-        github_frame.pack(pady=5)
+        # Links and Version
+        links_frame = tk.Frame(bottom_frame)
+        links_frame.pack(pady=5)
         
-        version_label = tk.Label(github_frame, text="v1.0.0", font=("Arial", 9), fg="gray")
+        version_label = tk.Label(links_frame, text="v1.0.0", font=("Arial", 9), fg="gray")
         version_label.pack()
         
-        github_link = tk.Label(github_frame, text="https://jlaiii.github.io/RUST-BM-AFK/", 
+        # Links container
+        links_container = tk.Frame(links_frame)
+        links_container.pack()
+        
+        github_link = tk.Label(links_container, text="GitHub", 
                               font=("Arial", 9), fg="blue", cursor="hand2")
-        github_link.pack()
+        github_link.pack(side="left", padx=5)
         github_link.bind("<Button-1>", lambda e: self.open_github_link())
+        
+        discord_link = tk.Label(links_container, text="Discord", 
+                               font=("Arial", 9), fg="blue", cursor="hand2")
+        discord_link.pack(side="left", padx=5)
+        discord_link.bind("<Button-1>", lambda e: self.open_discord_link())
         
         self.update_server_list()
         self.update_timer()
