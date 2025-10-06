@@ -72,9 +72,9 @@ class RustAFKHourAdder:
         self.settings = {
             "pause_time": 60,  # 1 minute in seconds
             "kill_after_movement": False,  # Kill player after movement to prevent spectating
-            "disable_startup_disconnect": True,  # Option to disable initial disconnect command when starting
+            "enable_startup_disconnect": False,  # Option to enable initial disconnect command when starting
             "disable_beep": False,  # Option to disable beep sounds
-            "minimal_activity": False,  # Option to enable minimal activity mode (25min + kill after movement)
+            "minimal_activity": False,  # Option to enable minimal activity mode (19min + kill after movement)
             "auto_start_rust": False,  # Option to auto start Rust via Steam
             "rust_load_time": "1 min",  # How long to wait for Rust to load
             "connection_wait_time": "1 min",  # How long to wait for connection to stabilize
@@ -95,6 +95,7 @@ class RustAFKHourAdder:
         self.start_time = None
         self.current_server_start_time = None
         self.next_server_switch_time = None
+        self.initial_disconnect_done = False  # Track if we've done the initial disconnect
         
         # Initialize log file path
         self.log_file = os.path.join(self.data_folder, f"afk_log_{datetime.now().strftime('%Y%m%d')}.txt")
@@ -328,7 +329,7 @@ class RustAFKHourAdder:
         self.pause_label.pack(side="left")
         self.pause_var = tk.StringVar(value="1 min")
         self.pause_dropdown = ttk.Combobox(pause_frame, textvariable=self.pause_var, 
-                                          values=["1 min", "2 min", "5 min", "10 min", "15 min", "20 min", "25 min"], 
+                                          values=["1 min", "2 min", "5 min", "10 min", "15 min", "19 min", "20 min", "25 min"], 
                                           width=12, state="readonly")
         self.pause_dropdown.pack(side="left", padx=10)
         
@@ -371,9 +372,13 @@ class RustAFKHourAdder:
         system_frame = tk.LabelFrame(right_col, text="System Settings", padx=10, pady=10)
         system_frame.pack(fill="x", pady=(0, 10))
         
-        self.disable_disconnect_var = tk.BooleanVar(value=self.settings.get("disable_startup_disconnect", True))
-        tk.Checkbutton(system_frame, text="Disable startup disconnect command", 
-                      variable=self.disable_disconnect_var).pack(anchor="w", pady=2)
+        self.enable_disconnect_var = tk.BooleanVar(value=self.settings.get("enable_startup_disconnect", False))
+        tk.Checkbutton(system_frame, text="Enable startup disconnect command", 
+                      variable=self.enable_disconnect_var).pack(anchor="w", pady=2)
+        
+        disconnect_note = tk.Label(system_frame, text="Toggle this on if you're already connected to a server.\nThis will disconnect you and connect to your selected server.", 
+                                  font=("Arial", 8), wraplength=350, fg="gray")
+        disconnect_note.pack(anchor="w", padx=20, pady=2)
         
         self.disable_beep_var = tk.BooleanVar(value=self.settings.get("disable_beep", False))
         tk.Checkbutton(system_frame, text="Disable beep sounds", 
@@ -389,7 +394,7 @@ class RustAFKHourAdder:
                                               command=self.on_minimal_activity_change)
         self.minimal_checkbox.pack(anchor="w", pady=2)
         
-        minimal_note = tk.Label(modes_frame, text="Sets 25min interval + kill after movement", 
+        minimal_note = tk.Label(modes_frame, text="Sets 19min interval + kill after movement", 
                                font=("Arial", 8), wraplength=350)
         minimal_note.pack(anchor="w", padx=20, pady=2)
     
@@ -615,8 +620,8 @@ class RustAFKHourAdder:
             self.previous_pause_value = self.pause_var.get()
             self.previous_kill_value = self.kill_after_movement_var.get()
             
-            # When minimal activity is enabled, set AFK loop to 25 minutes and enable kill after movement
-            self.pause_var.set("25 min")
+            # When minimal activity is enabled, set AFK loop to 19 minutes and enable kill after movement
+            self.pause_var.set("19 min")
             self.kill_after_movement_var.set(True)
             
             # Gray out and disable the controls that are now automatic
@@ -650,7 +655,7 @@ class RustAFKHourAdder:
         try:
             # Update settings from GUI
             self.settings["kill_after_movement"] = self.kill_after_movement_var.get()
-            self.settings["disable_startup_disconnect"] = self.disable_disconnect_var.get()
+            self.settings["enable_startup_disconnect"] = self.enable_disconnect_var.get()
             self.settings["disable_beep"] = self.disable_beep_var.get()
             self.settings["minimal_activity"] = self.minimal_activity_var.get()
             self.settings["auto_start_rust"] = self.auto_start_rust_var.get()
@@ -677,7 +682,7 @@ class RustAFKHourAdder:
                               "This will:\n" +
                               "• Reset AFK loop interval to 1 minute\n" +
                               "• Disable kill after movement\n" +
-                              "• Enable initial startup disconnect command\n" +
+                              "• Disable initial startup disconnect command\n" +
                               "• Enable beep sounds\n" +
                               "• Disable auto server switching\n" +
                               "• Disable stealth mode\n" +
@@ -688,7 +693,7 @@ class RustAFKHourAdder:
             self.settings = {
                 "pause_time": 60,  # 1 minute in seconds
                 "kill_after_movement": False,
-                "disable_startup_disconnect": True,
+                "enable_startup_disconnect": False,
                 "disable_beep": False,
                 "minimal_activity": False,
                 "auto_start_rust": False,
@@ -708,7 +713,7 @@ class RustAFKHourAdder:
             # Update GUI elements to reflect defaults
             self.pause_var.set("1 min")
             self.kill_after_movement_var.set(False)
-            self.disable_disconnect_var.set(True)
+            self.enable_disconnect_var.set(False)
             self.disable_beep_var.set(False)
             self.minimal_activity_var.set(False)
             self.auto_start_rust_var.set(False)
@@ -892,6 +897,8 @@ class RustAFKHourAdder:
                 pause_minutes = 10
             elif pause_text == "15 min":
                 pause_minutes = 15
+            elif pause_text == "19 min":
+                pause_minutes = 19
             elif pause_text == "20 min":
                 pause_minutes = 20
             elif pause_text == "25 min":
@@ -930,11 +937,11 @@ class RustAFKHourAdder:
                                    "This can happen if servers were deleted after being added to rotation.\n\n" +
                                    "Please reselect servers for rotation.")
                 return
-            # Pick first server from rotation
-            server_index = self.settings["server_switching"]["selected_servers"][0]
+            # Pick random server from rotation
+            server_index = random.choice(self.settings["server_switching"]["selected_servers"])
             self.selected_server = self.servers[server_index]
             self.setup_next_server_switch()
-            self.log_status(f"Auto server switching enabled - starting with: {self.selected_server['name']}")
+            self.log_status(f"Auto server switching enabled - randomly selected: {self.selected_server['name']}")
             self.log_status("AUTOMATION: Server selection complete, proceeding to automation setup...")
         else:
             # Server switching is disabled - use manual selection from listbox
@@ -1062,7 +1069,7 @@ class RustAFKHourAdder:
         self.log_status(f"Premium server: {'Yes' if self.selected_server.get('premium', False) else 'No'}")
         self.log_status(f"Cycle interval: {pause_minutes} minutes ({pause_minutes * 60} seconds)")
         self.log_status(f"Kill after movement: {'ENABLED' if self.kill_after_movement_var.get() else 'DISABLED'}")
-        self.log_status(f"Initial startup disconnect: {'DISABLED' if self.disable_disconnect_var.get() else 'ENABLED'}")
+        self.log_status(f"Initial startup disconnect: {'ENABLED' if self.enable_disconnect_var.get() else 'DISABLED'}")
         
         if self.switch_enabled_var.get():
             rotation_count = len(self.settings["server_switching"]["selected_servers"])
@@ -1271,11 +1278,9 @@ class RustAFKHourAdder:
                     self.stealth_mode_cycle()
                     continue
                 
-                # Step 1: Disconnect from current server (ONLY on first cycle if not disabled)
-                # The disconnect command should ONLY happen:
-                # 1. First cycle (if "disable startup disconnect" is unchecked)
-                # 2. When switching servers (handled separately in server switching logic)
-                if cycle_count == 1 and not self.settings.get("disable_startup_disconnect", False):
+                # Step 1: Initial startup disconnect (ONLY ONCE at the very beginning)
+                # This should ONLY happen once when the script first starts, not every cycle
+                if not self.initial_disconnect_done and self.settings.get("enable_startup_disconnect", False):
                     step_start = datetime.now()
                     self.log_status("STEP 1: Disconnecting from current server")
                     self.log_status("   Opening console (F1 key)")
@@ -1296,9 +1301,11 @@ class RustAFKHourAdder:
                     
                     step_duration = (datetime.now() - step_start).total_seconds()
                     self.log_status(f"STEP 1 COMPLETED in {step_duration:.1f}s - Server disconnection finished")
+                    self.initial_disconnect_done = True  # Mark that we've done the initial disconnect
                 else:
-                    if cycle_count == 1:
+                    if not self.initial_disconnect_done:
                         self.log_status("STEP 1 SKIPPED: Initial startup disconnect disabled in settings")
+                        self.initial_disconnect_done = True  # Mark as done even if skipped
                     # No disconnect needed for subsequent cycles
                 
                 # Step 2: Connect to target server (EVERY CYCLE for reliability)
@@ -1492,8 +1499,8 @@ class RustAFKHourAdder:
         """Execute a stealth mode cycle: Connect → Kill → Wait"""
         self.log_status("=== STEALTH MODE CYCLE ===")
         
-        # Step 1: Disconnect from current server first (if not disabled)
-        if not self.settings.get("disable_startup_disconnect", False):
+        # Step 1: Initial startup disconnect (ONLY ONCE at the very beginning)
+        if not self.initial_disconnect_done and self.settings.get("enable_startup_disconnect", False):
             step_start = datetime.now()
             self.log_status("STEALTH STEP 1: Disconnecting from current server")
             self.log_status("   Opening console (F1 key)")
@@ -1513,8 +1520,11 @@ class RustAFKHourAdder:
             
             step_duration = (datetime.now() - step_start).total_seconds()
             self.log_status(f"STEALTH STEP 1 COMPLETED in {step_duration:.1f}s - Server disconnection finished")
+            self.initial_disconnect_done = True  # Mark that we've done the initial disconnect
         else:
-            self.log_status("STEALTH STEP 1 SKIPPED: Initial startup disconnect disabled in settings")
+            if not self.initial_disconnect_done:
+                self.log_status("STEALTH STEP 1 SKIPPED: Initial startup disconnect disabled in settings")
+                self.initial_disconnect_done = True  # Mark as done even if skipped
             time.sleep(1)
         
         # Step 2: Connect to target server
