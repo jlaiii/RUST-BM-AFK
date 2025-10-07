@@ -20,13 +20,48 @@
     "premium": false
   },
   {
-    "name": "Brasa.gg - BR 2X",
-    "ip": "2x.brasa.gg:28015",
+    "name": "[US] Stevious 2x Main | Vanilla",
+    "ip": "205.234.243.11:28010",
     "premium": false
   },
   {
-    "name": "[US] Stevious 2x Main | Vanilla",
-    "ip": "205.234.243.11:28010",
+    "name": "Rusty Moose |US Monthly|",
+    "ip": "monthly.us.moose.gg:28010",
+    "premium": true
+  },
+  {
+    "name": "Rusty Moose |US Main|",
+    "ip": "205.178.168.53:28010",
+    "premium": true
+  },
+  {
+    "name": "Rusty Moose |US Biweekly|",
+    "ip": "biweekly.us.moose.gg:28010",
+    "premium": true
+  },
+  {
+    "name": "Rusticated.com - US Premium Long",
+    "ip": "us-long.rusticated.com:28010",
+    "premium": true
+  },
+  {
+    "name": "[US East] Facepunch Premium 4",
+    "ip": "40.160.19.217:28020",
+    "premium": true
+  },
+  {
+    "name": "[US East] Facepunch Premium 1",
+    "ip": "40.160.19.6:28015",
+    "premium": true
+  },
+  {
+    "name": "[US East] Facepunch 5",
+    "ip": "40.160.19.12:28015",
+    "premium": false
+  },
+  {
+    "name": "[US East] Facepunch 3",
+    "ip": "40.160.19.17:28015",
     "premium": false
   }
 ]
