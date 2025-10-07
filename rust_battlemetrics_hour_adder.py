@@ -60,7 +60,7 @@ class RustAFKHourAdder:
     def __init__(self):
         self.root = tk.Tk()
         self.root.title("Rust Battlemetrics AFK Hour Adder Tool")
-        self.root.geometry("900x700")  # Wider and shorter
+        self.root.geometry("900x800")  # Increased height to accommodate new tab and all controls
         self.root.resizable(True, True)  # Allow resizing so users can adjust if needed
         
         # Create data folder
@@ -82,6 +82,7 @@ class RustAFKHourAdder:
             "boot_wait_time": "2 min",  # How long to wait after Windows boot before starting
             "auto_restart_game": False,  # Option to auto restart game for updates
             "restart_interval": "6h",  # How often to restart the game
+            "typing_mode": "human",  # "human" for realistic typing, "bot" for instant paste
             "server_switching": {
                 "enabled": False,
                 "time_range": "1-2",  # hours
@@ -97,6 +98,12 @@ class RustAFKHourAdder:
         self.current_server_start_time = None
         self.next_server_switch_time = None
         self.initial_disconnect_done = False  # Track if we've done the initial disconnect
+        
+        # Server adding variables
+        self.is_adding_servers = False
+        self.add_servers_thread = None
+        self.current_add_servers_list = []
+        self.current_add_server_index = 0
         
         # Initialize log file path
         self.log_file = os.path.join(self.data_folder, f"afk_log_{datetime.now().strftime('%Y%m%d')}.txt")
@@ -187,7 +194,10 @@ class RustAFKHourAdder:
         # Tab 4: Server Switching
         self.create_server_switching_tab()
         
-        # Tab 5: About
+        # Tab 5: Add Servers Played
+        self.create_add_servers_played_tab()
+        
+        # Tab 6: About
         self.create_about_tab()
         
         # Bottom section - Control buttons and status
@@ -305,6 +315,15 @@ class RustAFKHourAdder:
                  bg="#8B0000", fg="white", width=18).pack(pady=2)
         tk.Button(right_frame, text="Delete All Non-Premium", command=self.delete_all_non_premium, 
                  bg="#8B0000", fg="white", width=18).pack(pady=2)
+        
+        # Separator
+        tk.Frame(right_frame, height=2, bg="gray").pack(fill="x", pady=10)
+        
+        # Server count information
+        tk.Label(right_frame, text="Server Statistics", font=("Arial", 11, "bold")).pack(pady=(0, 10))
+        
+        self.server_count_label = tk.Label(right_frame, text="", font=("Arial", 9), fg="gray", justify="left")
+        self.server_count_label.pack(pady=2)
     
     def create_basic_settings_tab(self):
         """Create the basic settings tab"""
@@ -385,6 +404,20 @@ class RustAFKHourAdder:
         tk.Checkbutton(system_frame, text="Disable beep sounds", 
                       variable=self.disable_beep_var).pack(anchor="w", pady=2)
         
+        # Typing mode setting
+        typing_mode_frame = tk.Frame(system_frame)
+        typing_mode_frame.pack(fill="x", pady=5)
+        
+        tk.Label(typing_mode_frame, text="Command typing mode:").pack(side="left")
+        self.typing_mode_var = tk.StringVar(value=self.settings.get("typing_mode", "human"))
+        self.typing_mode_dropdown = ttk.Combobox(typing_mode_frame, textvariable=self.typing_mode_var, 
+                                               values=["human", "bot"], width=8, state="readonly")
+        self.typing_mode_dropdown.pack(side="left", padx=10)
+        
+        typing_note = tk.Label(system_frame, text="Global setting for ALL commands: Human = realistic typing | Bot = instant paste", 
+                              font=("Arial", 8), wraplength=350)
+        typing_note.pack(anchor="w", padx=20, pady=2)
+        
         # Special Modes
         modes_frame = tk.LabelFrame(right_col, text="Special Modes", padx=10, pady=10)
         modes_frame.pack(fill="x")
@@ -418,7 +451,7 @@ class RustAFKHourAdder:
         
         self.auto_start_rust_var = tk.BooleanVar(value=self.settings.get("auto_start_rust", True))
         tk.Checkbutton(game_frame, text="Auto start Rust and focus window", 
-                      variable=self.auto_start_rust_var).pack(anchor="w", pady=2)
+                      variable=self.auto_start_rust_var, command=self.save_settings).pack(anchor="w", pady=2)
         
         # Rust load time setting
         load_time_frame = tk.Frame(game_frame)
@@ -550,6 +583,83 @@ class RustAFKHourAdder:
         self.rotation_status_label.pack(fill="both", expand=True, padx=10)
         self.update_rotation_status()
         
+    def create_add_servers_played_tab(self):
+        """Create the add servers played tab"""
+        add_servers_frame = ttk.Frame(self.notebook)
+        self.notebook.add(add_servers_frame, text="Add Servers Played")
+        
+        # Main content
+        content_frame = tk.Frame(add_servers_frame)
+        content_frame.pack(fill="both", expand=True, padx=10, pady=10)
+        
+        # Description
+        desc_frame = tk.LabelFrame(content_frame, text="Server History Builder", padx=15, pady=15)
+        desc_frame.pack(fill="x", pady=(0, 20))
+        
+        desc_text = tk.Label(desc_frame, 
+                           text="Add servers to your Battlemetrics server history without farming hours.\n\n• Shows up in your 'Servers Played' history on Battlemetrics\n• Useful for building a realistic server history profile\n• Choose from All servers, Premium only, or Non-Premium only", 
+                           font=("Arial", 11), justify="left", wraplength=600)
+        desc_text.pack()
+        
+        # Settings
+        settings_frame = tk.LabelFrame(content_frame, text="Connection Settings", padx=15, pady=15)
+        settings_frame.pack(fill="x", pady=(0, 20))
+        
+        # Connection time setting
+        time_frame = tk.Frame(settings_frame)
+        time_frame.pack(fill="x", pady=5)
+        
+        tk.Label(time_frame, text="Connection time per server:").pack(side="left")
+        self.add_servers_time_var = tk.StringVar(value="1 min")
+        self.add_servers_time_dropdown = ttk.Combobox(time_frame, textvariable=self.add_servers_time_var, 
+                                                     values=["30 sec", "45 sec", "1 min", "1m 30s", "2 min", "3 min", "4 min", "5 min"], 
+                                                     width=10, state="readonly")
+        self.add_servers_time_dropdown.pack(side="left", padx=10)
+        
+        # Server selection options
+        selection_frame = tk.LabelFrame(content_frame, text="Server Selection", padx=15, pady=15)
+        selection_frame.pack(fill="x", pady=(0, 20))
+        
+        # Button container
+        button_container = tk.Frame(selection_frame)
+        button_container.pack(pady=10)
+        
+        # All servers button
+        self.add_all_servers_btn = tk.Button(button_container, text="Add All Servers", 
+                                           command=self.start_add_all_servers, 
+                                           bg="#4CAF50", fg="white", font=("Arial", 11, "bold"), width=18)
+        self.add_all_servers_btn.pack(side="left", padx=5)
+        
+        # Premium only button
+        self.add_premium_servers_btn = tk.Button(button_container, text="Add Premium Only", 
+                                               command=self.start_add_premium_servers, 
+                                               bg="#FF9800", fg="white", font=("Arial", 11, "bold"), width=18)
+        self.add_premium_servers_btn.pack(side="left", padx=5)
+        
+        # Non-premium only button
+        self.add_non_premium_servers_btn = tk.Button(button_container, text="Add Non-Premium Only", 
+                                                   command=self.start_add_non_premium_servers, 
+                                                   bg="#2196F3", fg="white", font=("Arial", 11, "bold"), width=18)
+        self.add_non_premium_servers_btn.pack(side="left", padx=5)
+        
+        # Stop button
+        self.stop_add_servers_btn = tk.Button(button_container, text="Stop Adding", 
+                                            command=self.stop_add_servers, 
+                                            bg="#8B0000", fg="white", font=("Arial", 11, "bold"), width=15, state="disabled")
+        self.stop_add_servers_btn.pack(side="left", padx=5)
+        
+        # Progress display
+        progress_frame = tk.LabelFrame(content_frame, text="Progress", padx=15, pady=15)
+        progress_frame.pack(fill="both", expand=True)
+        
+        self.add_servers_status_label = tk.Label(progress_frame, text="Ready to add servers to history", 
+                                               font=("Arial", 10), fg="blue")
+        self.add_servers_status_label.pack(pady=5)
+        
+        self.add_servers_progress_label = tk.Label(progress_frame, text="", 
+                                                 font=("Arial", 9), fg="gray")
+        self.add_servers_progress_label.pack(pady=2)
+        
     def create_about_tab(self):
         """Create the about tab"""
         about_frame = ttk.Frame(self.notebook)
@@ -677,6 +787,7 @@ class RustAFKHourAdder:
             self.settings["boot_wait_time"] = self.boot_wait_time_var.get()
             self.settings["auto_restart_game"] = self.auto_restart_game_var.get()
             self.settings["restart_interval"] = self.restart_interval_var.get()
+            self.settings["typing_mode"] = self.typing_mode_var.get()
             self.settings["server_switching"]["enabled"] = self.switch_enabled_var.get()
             self.settings["server_switching"]["time_range"] = self.time_range_var.get()
             self.settings["server_switching"]["stealth_mode"] = self.stealth_mode_var.get()
@@ -782,6 +893,18 @@ class RustAFKHourAdder:
             
             premium_text = " (Premium)" if server["premium"] else ""
             self.server_listbox.insert(tk.END, f"{server['name']}{premium_text}")
+        
+        # Update server count information
+        self.update_server_count()
+    
+    def update_server_count(self):
+        """Update the server count statistics display"""
+        total_servers = len(self.servers)
+        premium_servers = len([s for s in self.servers if s.get("premium", False)])
+        non_premium_servers = total_servers - premium_servers
+        
+        count_text = f"Total: {total_servers}\nPremium: {premium_servers}\nNon-Premium: {non_premium_servers}"
+        self.server_count_label.config(text=count_text)
     
     def add_server(self):
         dialog = ServerDialog(self.root)
@@ -899,6 +1022,11 @@ class RustAFKHourAdder:
                 self.log_status("Cleared server rotation list")
     
     def start_afk(self):
+        # Check if server adding is in progress
+        if self.is_adding_servers:
+            messagebox.showwarning("Warning", "Cannot start hour farming while adding servers to history. Please stop the server adding process first.")
+            return
+        
         # Validate settings
         try:
             pause_text = self.pause_var.get()
@@ -1175,7 +1303,7 @@ class RustAFKHourAdder:
         time.sleep(1)
         
         self.log_status("   Typing command: 'client.disconnect'")
-        self.human_type("client.disconnect")
+        self.type_command("client.disconnect")
         self.log_status("   Pressing Enter to execute disconnect")
         pyautogui.press('enter')
         time.sleep(1)
@@ -1310,7 +1438,7 @@ class RustAFKHourAdder:
                     time.sleep(1)
                     
                     self.log_status("   Typing command: 'client.disconnect'")
-                    self.human_type("client.disconnect")
+                    self.type_command("client.disconnect")
                     self.log_status("   Pressing Enter to execute disconnect")
                     pyautogui.press('enter')
                     time.sleep(0.5)
@@ -1342,7 +1470,7 @@ class RustAFKHourAdder:
                 connect_command = f"client.connect {self.selected_server['ip']}"
                 self.log_status(f"   Typing command: '{connect_command}'")
                 self.log_status(f"   Target: {self.selected_server['name']}")
-                self.human_type(connect_command)
+                self.type_command(connect_command)
                 time.sleep(1)  # Wait after typing
                 self.log_status("   Pressing Enter to execute connection")
                 pyautogui.press('enter')
@@ -1408,7 +1536,7 @@ class RustAFKHourAdder:
                 time.sleep(1)
                 
                 self.log_status("   Typing command: 'respawn'")
-                self.human_type("respawn")
+                self.type_command("respawn")
                 time.sleep(1)  # Wait after typing
                 self.log_status("   Pressing Enter to execute respawn")
                 pyautogui.press('enter')
@@ -1458,7 +1586,7 @@ class RustAFKHourAdder:
                     time.sleep(1)
                     
                     self.log_status("   Typing command: 'kill'")
-                    self.human_type("kill")
+                    self.type_command("kill")
                     self.log_status("   Pressing Enter to execute kill command")
                     pyautogui.press('enter')
                     time.sleep(0.5)
@@ -1530,7 +1658,7 @@ class RustAFKHourAdder:
             time.sleep(1)
             
             self.log_status("   Typing command: 'client.disconnect'")
-            self.human_type("client.disconnect")
+            self.type_command("client.disconnect")
             self.log_status("   Pressing Enter to execute disconnect")
             pyautogui.press('enter')
             time.sleep(0.5)
@@ -1559,7 +1687,7 @@ class RustAFKHourAdder:
         connect_command = f"client.connect {self.selected_server['ip']}"
         self.log_status(f"   Typing command: '{connect_command}'")
         self.log_status(f"   Target: {self.selected_server['name']}")
-        self.human_type(connect_command)
+        self.type_command(connect_command)
         time.sleep(1)  # Wait after typing
         self.log_status("   Pressing Enter to execute connection")
         pyautogui.press('enter')
@@ -1605,7 +1733,7 @@ class RustAFKHourAdder:
         time.sleep(1)  # Wait after opening console
         
         self.log_status("   Typing command: 'kill'")
-        self.human_type("kill")
+        self.type_command("kill")
         time.sleep(1)  # Wait after typing
         self.log_status("   Pressing Enter to execute kill command")
         pyautogui.press('enter')
@@ -1883,9 +2011,41 @@ class RustAFKHourAdder:
         avg_char_time = typing_duration / char_count if char_count > 0 else 0
         self.log_status(f"   Typed '{text}' ({char_count} chars in {typing_duration:.2f}s, avg: {avg_char_time:.3f}s/char)")
     
+    def type_command(self, text):
+        """Type command based on global typing mode setting"""
+        typing_mode = self.settings.get("typing_mode", "human")
+        
+        if typing_mode == "bot":
+            # Bot mode: Instant paste
+            pyautogui.write(text)
+            self.log_status(f"   Pasted '{text}' (bot mode)")
+        else:
+            # Human mode: Realistic typing
+            typing_start = datetime.now()
+            char_count = len(text)
+            
+            for i, char in enumerate(text):
+                # Check if any active process should be stopped
+                if not self.is_running and not self.is_adding_servers:
+                    self.log_status(f"WARNING: Typing interrupted at character {i+1}/{char_count}")
+                    return
+                
+                pyautogui.write(char)
+                # Random delay between 0.05 and 0.15 seconds for human-like typing
+                delay = 0.05 + (time.time() % 0.1)
+                time.sleep(delay)
+            
+            typing_duration = (datetime.now() - typing_start).total_seconds()
+            avg_char_time = typing_duration / char_count if char_count > 0 else 0
+            self.log_status(f"   Typed '{text}' ({char_count} chars in {typing_duration:.2f}s, avg: {avg_char_time:.3f}s/char)")
+    
     def stop_afk(self, play_beep=True):
         stop_time = datetime.now()
         self.is_running = False
+        
+        # Also stop server adding if it's running
+        if self.is_adding_servers:
+            self.stop_add_servers()
         
         # Calculate session statistics
         if self.start_time:
@@ -1929,6 +2089,288 @@ class RustAFKHourAdder:
         
         self.log_status("=== SESSION ENDED ===")
         self.log_status("="*60)
+    
+    def start_add_all_servers(self):
+        """Start adding all servers to history"""
+        if self.is_running:
+            messagebox.showwarning("Warning", "Cannot add servers while hour farming is running. Please stop farming first.")
+            return
+        
+        if not self.servers:
+            messagebox.showwarning("Warning", "No servers available. Please add some servers first.")
+            return
+        
+        self.current_add_servers_list = self.servers.copy()
+        self.start_add_servers_process("all servers")
+    
+    def start_add_premium_servers(self):
+        """Start adding premium servers to history"""
+        if self.is_running:
+            messagebox.showwarning("Warning", "Cannot add servers while hour farming is running. Please stop farming first.")
+            return
+        
+        premium_servers = [server for server in self.servers if server.get("premium", False)]
+        if not premium_servers:
+            messagebox.showwarning("Warning", "No premium servers available.")
+            return
+        
+        self.current_add_servers_list = premium_servers
+        self.start_add_servers_process("premium servers")
+    
+    def start_add_non_premium_servers(self):
+        """Start adding non-premium servers to history"""
+        if self.is_running:
+            messagebox.showwarning("Warning", "Cannot add servers while hour farming is running. Please stop farming first.")
+            return
+        
+        non_premium_servers = [server for server in self.servers if not server.get("premium", False)]
+        if not non_premium_servers:
+            messagebox.showwarning("Warning", "No non-premium servers available.")
+            return
+        
+        self.current_add_servers_list = non_premium_servers
+        self.start_add_servers_process("non-premium servers")
+    
+    def start_add_servers_process(self, server_type):
+        """Start the server adding process"""
+        # Confirm with user
+        server_count = len(self.current_add_servers_list)
+        connection_time = self.add_servers_time_var.get()
+        
+        # Only show manual instruction if auto-start is disabled
+        auto_start_enabled = self.auto_start_rust_var.get()
+        if auto_start_enabled:
+            # No additional message needed - auto-start will handle it
+            result = messagebox.askyesno("Confirm Server Adding", 
+                                       f"This will connect to {server_count} {server_type} for {connection_time} each.\n\n"
+                                       f"Total estimated time: {self.calculate_total_time(server_count, connection_time)}\n\n"
+                                       f"Continue?")
+        else:
+            # Show manual instruction when auto-start is disabled
+            result = messagebox.askyesno("Confirm Server Adding", 
+                                       f"This will connect to {server_count} {server_type} for {connection_time} each.\n\n"
+                                       f"Total estimated time: {self.calculate_total_time(server_count, connection_time)}\n\n"
+                                       f"Make sure Rust is running and you're in the main menu.\n\n"
+                                       f"Continue?")
+        
+        if not result:
+            return
+        
+        self.is_adding_servers = True
+        self.current_add_server_index = 0
+        
+        # Update UI
+        self.add_all_servers_btn.config(state="disabled")
+        self.add_premium_servers_btn.config(state="disabled")
+        self.add_non_premium_servers_btn.config(state="disabled")
+        self.stop_add_servers_btn.config(state="normal")
+        
+        self.add_servers_status_label.config(text=f"Adding {server_count} {server_type} to history...", fg="green")
+        
+        # Start the process in a separate thread
+        self.add_servers_thread = threading.Thread(target=self.add_servers_worker, daemon=True)
+        self.add_servers_thread.start()
+        
+        self.log_status(f"=== STARTED ADDING {server_count} {server_type.upper()} TO HISTORY ===")
+        self.log_status(f"Connection time per server: {connection_time}")
+    
+    def calculate_total_time(self, server_count, connection_time):
+        """Calculate total estimated time for adding servers"""
+        time_mapping = {
+            "30 sec": 30,
+            "45 sec": 45,
+            "1 min": 60,
+            "1m 30s": 90,
+            "2 min": 120,
+            "3 min": 180,
+            "4 min": 240,
+            "5 min": 300
+        }
+        
+        seconds_per_server = time_mapping.get(connection_time, 60)
+        total_seconds = server_count * (seconds_per_server + 10)  # Add 10 seconds for connection overhead
+        
+        hours, remainder = divmod(total_seconds, 3600)
+        minutes, seconds = divmod(remainder, 60)
+        
+        if hours > 0:
+            return f"{int(hours)}h {int(minutes)}m"
+        else:
+            return f"{int(minutes)}m {int(seconds)}s"
+    
+    def add_servers_worker(self):
+        """Worker thread for adding servers to history"""
+        try:
+            # Initial 5-second wait (standard startup delay)
+            self.log_status("=== STARTING SERVER HISTORY BUILDER ===")
+            self.log_status("Initial startup delay (5 seconds)...")
+            for i in range(5):
+                if not self.is_adding_servers:
+                    return
+                time.sleep(1)
+            
+            connection_time_str = self.add_servers_time_var.get()
+            time_mapping = {
+                "30 sec": 30,
+                "45 sec": 45,
+                "1 min": 60,
+                "1m 30s": 90,
+                "2 min": 120,
+                "3 min": 180,
+                "4 min": 240,
+                "5 min": 300
+            }
+            connection_time = time_mapping.get(connection_time_str, 60)
+            
+            # Check auto-start settings and handle Rust startup
+            if self.auto_start_rust_var.get():
+                self.log_status("Auto-start enabled: Checking if Rust needs to be started...")
+                if not self.is_rust_running():
+                    self.log_status("Rust not detected, starting via Steam...")
+                    if self.start_rust_via_steam():
+                        # Wait for Rust to load
+                        load_time_str = self.rust_load_time_var.get()
+                        load_time_mapping = {
+                            "30 sec": 30,
+                            "1 min": 60,
+                            "2 min": 120,
+                            "3 min": 180,
+                            "4 min": 240,
+                            "5 min": 300
+                        }
+                        load_time = load_time_mapping.get(load_time_str, 60)
+                        
+                        self.log_status(f"Waiting {load_time_str} for Rust to load...")
+                        for second in range(load_time):
+                            if not self.is_adding_servers:
+                                return
+                            time.sleep(1)
+                        
+                        self.log_status("Focusing Rust window...")
+                        self.focus_rust_window()
+                        time.sleep(2)  # Extra delay after focusing
+                    else:
+                        self.log_status("WARNING: Failed to start Rust via Steam")
+                        return
+                else:
+                    self.log_status("Rust is already running, focusing window...")
+                    self.focus_rust_window()
+                    time.sleep(2)
+            else:
+                self.log_status("Auto-start disabled: Assuming Rust is already running")
+                time.sleep(1)
+            
+            # Begin server connection loop
+            self.log_status(f"Starting to add {len(self.current_add_servers_list)} servers to history...")
+            
+            for i, server in enumerate(self.current_add_servers_list):
+                if not self.is_adding_servers:
+                    break
+                
+                self.current_add_server_index = i
+                server_name = server['name']
+                server_ip = server['ip']
+                
+                # Update progress
+                progress_text = f"Server {i+1}/{len(self.current_add_servers_list)}: {server_name}"
+                self.add_servers_progress_label.config(text=progress_text)
+                
+                self.log_status(f"ADDING SERVER {i+1}/{len(self.current_add_servers_list)}: {server_name}")
+                self.log_status(f"   IP: {server_ip}")
+                
+                # Step 1: Connect to server
+                self.log_status("   Opening console (F1 key)")
+                pyautogui.press('f1')
+                time.sleep(1)  # Wait for console to open
+                
+                connect_command = f"client.connect {server_ip}"
+                self.log_status(f"   Typing command: '{connect_command}'")
+                self.type_command(connect_command)
+                time.sleep(0.5)
+                
+                self.log_status("   Pressing Enter to execute connect")
+                pyautogui.press('enter')
+                time.sleep(1)
+                
+                # Close console
+                self.log_status("   Closing console (F1 key)")
+                pyautogui.press('f1')
+                time.sleep(1)  # Wait for console to close
+                
+                # Step 2: Wait for connection time (server registration period)
+                self.log_status(f"   Waiting {connection_time_str} for server to register in history...")
+                for second in range(connection_time):
+                    if not self.is_adding_servers:
+                        break
+                    time.sleep(1)
+                    remaining = connection_time - second - 1
+                    if remaining > 0:
+                        self.add_servers_progress_label.config(text=f"{progress_text} - {remaining}s remaining")
+                
+                if not self.is_adding_servers:
+                    break
+                
+                # Step 3: Disconnect from server
+                self.log_status("   Disconnecting from server")
+                pyautogui.press('f1')
+                time.sleep(1)  # Wait for console to open
+                
+                self.log_status("   Typing command: 'client.disconnect'")
+                self.type_command("client.disconnect")
+                self.log_status("   Pressing Enter to execute disconnect")
+                pyautogui.press('enter')
+                time.sleep(0.5)
+                
+                # Close console
+                self.log_status("   Closing console (F1 key)")
+                pyautogui.press('f1')
+                self.log_status("   Waiting 5 seconds for disconnect to complete...")
+                time.sleep(5)
+                
+                self.log_status(f"   ✓ Successfully added {server_name} to server history")
+                
+                # Delay between servers (allow disconnect to complete)
+                if i < len(self.current_add_servers_list) - 1:
+                    self.log_status("   Waiting 3 seconds before next server...")
+                    time.sleep(3)
+            
+            # Process completed
+            if self.is_adding_servers:
+                self.log_status(f"=== COMPLETED ADDING {len(self.current_add_servers_list)} SERVERS TO HISTORY ===")
+                self.add_servers_status_label.config(text="✓ All servers added to history successfully!", fg="green")
+                self.add_servers_progress_label.config(text="Check your Battlemetrics profile for updated server history")
+            else:
+                self.log_status("=== SERVER ADDING STOPPED BY USER ===")
+                self.add_servers_status_label.config(text="Server adding stopped by user", fg="orange")
+                self.add_servers_progress_label.config(text="")
+            
+        except Exception as e:
+            self.log_status(f"ERROR in server adding: {e}")
+            self.add_servers_status_label.config(text=f"Error: {e}", fg="red")
+        finally:
+            # Reset UI state
+            self.is_adding_servers = False
+            self.add_all_servers_btn.config(state="normal")
+            self.add_premium_servers_btn.config(state="normal")
+            self.add_non_premium_servers_btn.config(state="normal")
+            self.stop_add_servers_btn.config(state="disabled")
+    
+    def stop_add_servers(self):
+        """Stop the server adding process"""
+        self.is_adding_servers = False
+        self.log_status("Stopping server adding process...")
+        
+        if self.add_servers_thread and self.add_servers_thread.is_alive():
+            self.add_servers_thread.join(timeout=2)
+        
+        # Reset UI
+        self.add_all_servers_btn.config(state="normal")
+        self.add_premium_servers_btn.config(state="normal")
+        self.add_non_premium_servers_btn.config(state="normal")
+        self.stop_add_servers_btn.config(state="disabled")
+        
+        self.add_servers_status_label.config(text="Ready to add servers to history", fg="blue")
+        self.add_servers_progress_label.config(text="")
     
     def open_github_link(self):
         """Open the GitHub link in the default web browser"""
