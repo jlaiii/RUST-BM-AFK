@@ -75,10 +75,11 @@ class RustAFKHourAdder:
             "enable_startup_disconnect": False,  # Option to enable initial disconnect command when starting
             "disable_beep": False,  # Option to disable beep sounds
             "minimal_activity": False,  # Option to enable minimal activity mode (19min + kill after movement)
-            "auto_start_rust": False,  # Option to auto start Rust via Steam
+            "auto_start_rust": True,  # Option to auto start Rust via Steam
             "rust_load_time": "1 min",  # How long to wait for Rust to load
             "connection_wait_time": "1 min",  # How long to wait for connection to stabilize
             "start_at_boot": False,  # Option to start farming at Windows startup
+            "boot_wait_time": "2 min",  # How long to wait after Windows boot before starting
             "auto_restart_game": False,  # Option to auto restart game for updates
             "restart_interval": "6h",  # How often to restart the game
             "server_switching": {
@@ -415,7 +416,7 @@ class RustAFKHourAdder:
         game_frame = tk.LabelFrame(left_col, text="Game Management", padx=10, pady=10)
         game_frame.pack(fill="x", pady=(0, 10))
         
-        self.auto_start_rust_var = tk.BooleanVar(value=self.settings.get("auto_start_rust", False))
+        self.auto_start_rust_var = tk.BooleanVar(value=self.settings.get("auto_start_rust", True))
         tk.Checkbutton(game_frame, text="Auto start Rust and focus window", 
                       variable=self.auto_start_rust_var).pack(anchor="w", pady=2)
         
@@ -465,7 +466,18 @@ class RustAFKHourAdder:
         tk.Checkbutton(startup_frame, text="Start farming at Windows startup", 
                       variable=self.start_at_boot_var).pack(anchor="w", pady=2)
         
-        boot_note = tk.Label(startup_frame, text="Waits 2min after boot, then starts", 
+        # Boot wait time setting
+        boot_wait_frame = tk.Frame(startup_frame)
+        boot_wait_frame.pack(fill="x", pady=5)
+        
+        tk.Label(boot_wait_frame, text="Boot wait time:").pack(side="left")
+        self.boot_wait_time_var = tk.StringVar(value=self.settings.get("boot_wait_time", "2 min"))
+        self.boot_wait_time_dropdown = ttk.Combobox(boot_wait_frame, textvariable=self.boot_wait_time_var, 
+                                                   values=["1 min", "2 min", "3 min", "4 min", "5 min"], 
+                                                   width=8, state="readonly")
+        self.boot_wait_time_dropdown.pack(side="left", padx=10)
+        
+        boot_note = tk.Label(startup_frame, text="App starts immediately but waits selected time before farming", 
                             font=("Arial", 8), wraplength=350)
         boot_note.pack(anchor="w", padx=20, pady=2)
     
@@ -662,6 +674,7 @@ class RustAFKHourAdder:
             self.settings["rust_load_time"] = self.rust_load_time_var.get()
             self.settings["connection_wait_time"] = self.connection_wait_time_var.get()
             self.settings["start_at_boot"] = self.start_at_boot_var.get()
+            self.settings["boot_wait_time"] = self.boot_wait_time_var.get()
             self.settings["auto_restart_game"] = self.auto_restart_game_var.get()
             self.settings["restart_interval"] = self.restart_interval_var.get()
             self.settings["server_switching"]["enabled"] = self.switch_enabled_var.get()
@@ -696,10 +709,11 @@ class RustAFKHourAdder:
                 "enable_startup_disconnect": False,
                 "disable_beep": False,
                 "minimal_activity": False,
-                "auto_start_rust": False,
+                "auto_start_rust": True,
                 "rust_load_time": "1 min",
                 "connection_wait_time": "1 min",
                 "start_at_boot": False,
+                "boot_wait_time": "2 min",
                 "auto_restart_game": False,
                 "restart_interval": "6h",
                 "server_switching": {
@@ -716,10 +730,11 @@ class RustAFKHourAdder:
             self.enable_disconnect_var.set(False)
             self.disable_beep_var.set(False)
             self.minimal_activity_var.set(False)
-            self.auto_start_rust_var.set(False)
+            self.auto_start_rust_var.set(True)
             self.rust_load_time_var.set("1 min")
             self.connection_wait_time_var.set("1 min")
             self.start_at_boot_var.set(False)
+            self.boot_wait_time_var.set("2 min")
             self.auto_restart_game_var.set(False)
             self.restart_interval_var.set("6h")
             self.switch_enabled_var.set(False)
@@ -1030,8 +1045,15 @@ class RustAFKHourAdder:
                     self.status_label.config(text="Failed to start Rust")
                     return
             else:
-                self.log_status("AUTOMATION: Rust already running, focusing window...")
-                self.status_label.config(text="Rust already running - Focusing window...")
+                self.log_status("AUTOMATION: Rust already running, waiting 5 seconds before focusing...")
+                # 5-second countdown before focusing window
+                for i in range(5, 0, -1):
+                    self.status_label.config(text=f"Rust already running - Focusing window in {i} seconds...")
+                    self.root.update()
+                    time.sleep(1)
+                
+                self.log_status("AUTOMATION: Now focusing Rust window...")
+                self.status_label.config(text="Focusing Rust window...")
                 self.root.update()
                 if self.focus_rust_window():
                     self.log_status("AUTOMATION: Rust window focused successfully")
@@ -1173,8 +1195,8 @@ class RustAFKHourAdder:
         self.log_status("=== STARTING COUNTDOWN SEQUENCE ===")
         countdown_start = datetime.now()
         
-        # Countdown from 10
-        for i in range(10, 0, -1):
+        # Countdown from 3
+        for i in range(3, 0, -1):
             if not self.is_running:
                 self.log_status("Countdown interrupted by user")
                 return
@@ -1633,37 +1655,191 @@ class RustAFKHourAdder:
             return False
     
     def focus_rust_window(self):
-        """Focus the Rust game window"""
+        """Focus the Rust game window using aggressive methods"""
+        self.log_status("AUTOMATION: Attempting to focus Rust window...")
+        
+        # Method 1: Aggressive Windows API approach
         try:
-            import pygetwindow as gw
-            rust_windows = gw.getWindowsWithTitle("Rust")
-            if rust_windows:
-                rust_window = rust_windows[0]
-                rust_window.activate()
-                self.log_status("AUTOMATION: Rust window focused successfully")
+            import ctypes
+            from ctypes import wintypes
+            
+            self.log_status("METHOD 1: Using aggressive Windows API...")
+            
+            user32 = ctypes.windll.user32
+            kernel32 = ctypes.windll.kernel32
+            
+            # Find Rust process and window
+            import psutil
+            rust_hwnd = None
+            
+            for proc in psutil.process_iter(['pid', 'name']):
+                if proc.info['name'] and 'RustClient.exe' in proc.info['name']:
+                    pid = proc.info['pid']
+                    self.log_status(f"Found RustClient.exe process (PID: {pid})")
+                    
+                    # Find window belonging to this process
+                    def enum_windows_proc(hwnd, lParam):
+                        nonlocal rust_hwnd
+                        if user32.IsWindowVisible(hwnd):
+                            window_pid = wintypes.DWORD()
+                            user32.GetWindowThreadProcessId(hwnd, ctypes.byref(window_pid))
+                            if window_pid.value == pid:
+                                # Get window title to verify it's the main window
+                                title_length = user32.GetWindowTextLengthW(hwnd)
+                                if title_length > 0:
+                                    title_buffer = ctypes.create_unicode_buffer(title_length + 1)
+                                    user32.GetWindowTextW(hwnd, title_buffer, title_length + 1)
+                                    title = title_buffer.value
+                                    self.log_status(f"Found window: '{title}' (HWND: {hwnd})")
+                                    rust_hwnd = hwnd
+                                    return False  # Stop enumeration
+                        return True
+                    
+                    EnumWindowsProc = ctypes.WINFUNCTYPE(ctypes.c_bool, ctypes.POINTER(ctypes.c_int), ctypes.POINTER(ctypes.c_int))
+                    user32.EnumWindows(EnumWindowsProc(enum_windows_proc), 0)
+                    
+                    if rust_hwnd:
+                        break
+            
+            if rust_hwnd:
+                self.log_status("METHOD 1: Attempting aggressive window focusing...")
+                
+                # Multiple aggressive focusing techniques
+                # 1. Restore window if minimized
+                user32.ShowWindow(rust_hwnd, 9)  # SW_RESTORE
+                time.sleep(0.1)
+                
+                # 2. Bring to front
+                user32.BringWindowToTop(rust_hwnd)
+                time.sleep(0.1)
+                
+                # 3. Set as foreground window
+                user32.SetForegroundWindow(rust_hwnd)
+                time.sleep(0.1)
+                
+                # 4. Activate window
+                user32.SetActiveWindow(rust_hwnd)
+                time.sleep(0.1)
+                
+                # 5. Force focus with keyboard input
+                user32.SetFocus(rust_hwnd)
+                
+                self.log_status("SUCCESS: Applied aggressive focusing to Rust window")
                 return True
             else:
-                self.log_status("WARNING: Rust window not found - make sure Rust is running")
-                # Try alternative window titles
-                alt_titles = ["RustClient", "Rust Client"]
-                for title in alt_titles:
-                    alt_windows = gw.getWindowsWithTitle(title)
-                    if alt_windows:
-                        alt_windows[0].activate()
-                        self.log_status(f"AUTOMATION: Found and focused window with title: {title}")
-                        return True
-                return False
-        except ImportError:
-            self.log_status("ERROR: pygetwindow package not installed - installing now...")
-            if install_package("pygetwindow==0.0.9"):
-                self.log_status("SUCCESS: pygetwindow installed, retrying window focus...")
-                return self.focus_rust_window()  # Retry after installation
-            else:
-                self.log_status("ERROR: Failed to install pygetwindow - window focusing disabled")
-                return False
+                self.log_status("METHOD 1: Could not find Rust window handle")
+                
         except Exception as e:
-            self.log_status(f"ERROR: Failed to focus Rust window: {e}")
-            return False
+            self.log_status(f"METHOD 1: Error - {e}")
+        
+        # Method 2: pygetwindow with aggressive activation
+        try:
+            import pygetwindow as gw
+            
+            self.log_status("METHOD 2: pygetwindow with aggressive activation...")
+            
+            possible_titles = ["Rust", "RustClient", "Rust Client", "RustClient.exe"]
+            
+            for title in possible_titles:
+                try:
+                    windows = gw.getWindowsWithTitle(title)
+                    if windows:
+                        window = windows[0]
+                        self.log_status(f"Found window: '{title}'")
+                        
+                        # Multiple activation attempts
+                        window.restore()  # Restore if minimized
+                        time.sleep(0.1)
+                        window.activate()  # Activate
+                        time.sleep(0.1)
+                        window.maximize()  # Try maximize
+                        time.sleep(0.1)
+                        window.activate()  # Activate again
+                        
+                        self.log_status(f"SUCCESS: Aggressively activated window '{title}'")
+                        return True
+                except Exception as e:
+                    self.log_status(f"Failed to activate '{title}': {e}")
+                    continue
+            
+            # Try partial matches with aggressive activation
+            all_windows = gw.getAllWindows()
+            for window in all_windows:
+                if window.title and any(keyword.lower() in window.title.lower() for keyword in ["rust", "client"]):
+                    try:
+                        self.log_status(f"Trying partial match: '{window.title}'")
+                        window.restore()
+                        time.sleep(0.1)
+                        window.activate()
+                        time.sleep(0.1)
+                        window.activate()  # Double activate
+                        self.log_status(f"SUCCESS: Activated '{window.title}'")
+                        return True
+                    except Exception:
+                        continue
+            
+            self.log_status("METHOD 2: No suitable windows found")
+            
+        except ImportError:
+            if install_package("pygetwindow==0.0.9"):
+                return self.focus_rust_window()
+            else:
+                self.log_status("METHOD 2: Failed to install pygetwindow")
+        except Exception as e:
+            self.log_status(f"METHOD 2: Error - {e}")
+        
+        # Method 3: Keyboard simulation to force focus
+        try:
+            self.log_status("METHOD 3: Using keyboard simulation...")
+            
+            # Alt+Tab to cycle through windows
+            pyautogui.hotkey('alt', 'tab')
+            time.sleep(0.5)
+            
+            # Try multiple Alt+Tab presses to find Rust
+            for i in range(5):  # Try up to 5 windows
+                pyautogui.press('tab')
+                time.sleep(0.3)
+                # Could check window title here, but for now just cycle
+            
+            pyautogui.press('enter')  # Select current window
+            time.sleep(0.2)
+            
+            self.log_status("METHOD 3: Completed Alt+Tab cycling")
+            return True
+            
+        except Exception as e:
+            self.log_status(f"METHOD 3: Error - {e}")
+        
+        # Method 4: Click on taskbar (if visible)
+        try:
+            self.log_status("METHOD 4: Attempting taskbar click...")
+            
+            # This is a last resort - click somewhere on the taskbar area where Rust might be
+            # Get screen dimensions
+            import pyautogui
+            screen_width, screen_height = pyautogui.size()
+            
+            # Click in taskbar area (bottom of screen)
+            taskbar_y = screen_height - 40
+            
+            # Try clicking in several taskbar positions
+            for x_offset in [200, 400, 600, 800]:
+                if x_offset < screen_width:
+                    try:
+                        pyautogui.click(x_offset, taskbar_y)
+                        time.sleep(0.2)
+                    except:
+                        continue
+            
+            self.log_status("METHOD 4: Attempted taskbar clicks")
+            return True
+            
+        except Exception as e:
+            self.log_status(f"METHOD 4: Error - {e}")
+        
+        self.log_status("WARNING: All focusing methods completed - you may need to manually tab to Rust")
+        return False
     
     def kill_rust_process(self):
         """Kill the Rust process"""
