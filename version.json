@@ -1,0 +1,13 @@
+{
+  "version": "1.1.0",
+  "release_date": "2025-10-09",
+  "changelog": [
+    "Added stealth mode randomization (5-20 minutes)",
+    "Fixed Server History Builder UI layout issues",
+    "Added automatic update checking system",
+    "Improved server validation performance",
+    "Enhanced BattleMetrics integration"
+  ],
+  "download_url": "https://github.com/jlaiii/RUST-BM-AFK/releases/latest",
+  "github_url": "https://github.com/jlaiii/RUST-BM-AFK"
+}
