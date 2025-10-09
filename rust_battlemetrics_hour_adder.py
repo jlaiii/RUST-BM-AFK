@@ -144,6 +144,9 @@ class RustAFKHourAdder:
         if self.settings.get("auto_check_updates", True):
             self.root.after(2000, self.background_update_check)  # Check after 2 seconds
         
+        # Sync Windows startup entry with current setting
+        self.sync_windows_startup_entry()
+        
         # Check if we should start farming at boot
         if self.settings.get("start_at_boot", False):
             self.root.after(1000, self.handle_startup_farming)  # Check after 1 second
@@ -2929,7 +2932,87 @@ Discord: https://discord.gg/a5T2xBhKgt"""
         status = "ENABLED" if self.start_at_boot_var.get() else "DISABLED"
         wait_time = self.boot_wait_time_var.get() if self.start_at_boot_var.get() else "N/A"
         self.log_status(f"Start farming at Windows startup: {status} (Wait time: {wait_time})")
+        
+        # Actually manage the Windows startup entry
+        if self.start_at_boot_var.get():
+            self.create_windows_startup_entry()
+        else:
+            self.remove_windows_startup_entry()
+        
         self.save_settings()
+    
+    def create_windows_startup_entry(self):
+        """Create Windows startup entry for the application"""
+        try:
+            import os
+            startup_dir = os.path.join(os.environ['APPDATA'], 'Microsoft', 'Windows', 'Start Menu', 'Programs', 'Startup')
+            startup_file = os.path.join(startup_dir, 'rust_afk_startup.bat')
+            
+            # Get the current script directory
+            script_dir = os.path.dirname(os.path.abspath(__file__))
+            script_path = os.path.join(script_dir, 'rust_battlemetrics_hour_adder.py')
+            
+            # Create the startup batch file content
+            batch_content = f'''@echo off
+echo Starting Rust AFK Hour Adder from Windows Startup...
+echo.
+cd /d "{script_dir}"
+if not exist "rust_battlemetrics_hour_adder.py" (
+    echo ERROR: Script not found in %cd%
+    pause
+    exit /b 1
+)
+python rust_battlemetrics_hour_adder.py
+if errorlevel 1 (
+    echo Error starting the script. Press any key to exit.
+    pause
+)'''
+            
+            # Write the batch file
+            with open(startup_file, 'w') as f:
+                f.write(batch_content)
+            
+            self.log_status("Windows startup entry created successfully")
+            
+        except Exception as e:
+            self.log_status(f"Error creating Windows startup entry: {e}")
+            messagebox.showerror("Startup Error", f"Failed to create Windows startup entry: {e}")
+    
+    def remove_windows_startup_entry(self):
+        """Remove Windows startup entry for the application"""
+        try:
+            import os
+            startup_dir = os.path.join(os.environ['APPDATA'], 'Microsoft', 'Windows', 'Start Menu', 'Programs', 'Startup')
+            startup_file = os.path.join(startup_dir, 'rust_afk_startup.bat')
+            
+            if os.path.exists(startup_file):
+                os.remove(startup_file)
+                self.log_status("Windows startup entry removed successfully")
+            else:
+                self.log_status("No Windows startup entry found to remove")
+                
+        except Exception as e:
+            self.log_status(f"Error removing Windows startup entry: {e}")
+            messagebox.showerror("Startup Error", f"Failed to remove Windows startup entry: {e}")
+    
+    def sync_windows_startup_entry(self):
+        """Sync Windows startup entry with current setting on application start"""
+        try:
+            import os
+            startup_dir = os.path.join(os.environ['APPDATA'], 'Microsoft', 'Windows', 'Start Menu', 'Programs', 'Startup')
+            startup_file = os.path.join(startup_dir, 'rust_afk_startup.bat')
+            startup_exists = os.path.exists(startup_file)
+            setting_enabled = self.settings.get("start_at_boot", False)
+            
+            if setting_enabled and not startup_exists:
+                # Setting is enabled but startup file doesn't exist - create it
+                self.create_windows_startup_entry()
+            elif not setting_enabled and startup_exists:
+                # Setting is disabled but startup file exists - remove it
+                self.remove_windows_startup_entry()
+            
+        except Exception as e:
+            self.log_status(f"Error syncing Windows startup entry: {e}")
     
     def on_server_switching_change(self):
         """Handle server switching checkbox change"""
