@@ -1,9 +1,36 @@
 {
-  "version": "1.0.0",
+  "version": "1.1.0",
   "release_date": "2025-10-09",
-  "changelog": [
-    "First public release"
-  ],
   "download_url": "https://github.com/jlaiii/RUST-BM-AFK/releases/latest",
-  "github_url": "https://github.com/jlaiii/RUST-BM-AFK"
+  "github_url": "https://github.com/jlaiii/RUST-BM-AFK",
+  "version_history": [
+    {
+      "version": "1.1.0",
+      "release_date": "2025-10-09",
+      "changelog": [
+        "Added new typing modes: Kid and Pro",
+        "Kid mode: Slow typing (15-25 WPM) with random spelling mistakes and corrections",
+        "Pro mode: Fast professional typing (~90 WPM)",
+        "Enhanced Human mode: More realistic typing patterns with variable speeds, natural pauses, and occasional typos",
+        "Improved typing rhythm simulation with momentum and fatigue effects",
+        "Character-specific delays based on keyboard layout difficulty",
+        "Updated UI to show all 4 typing modes with descriptions"
+      ]
+    },
+    {
+      "version": "1.0.0",
+      "release_date": "2025-10-09",
+      "changelog": [
+        "First public release",
+        "AFK hour farming with customizable intervals",
+        "Server management with premium/non-premium filtering",
+        "BattleMetrics integration for server validation",
+        "Human and Bot typing modes",
+        "Auto-restart and boot startup options",
+        "Server switching and stealth mode",
+        "Comprehensive logging system",
+        "Update notification system"
+      ]
+    }
+  ]
 }
