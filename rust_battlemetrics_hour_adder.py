@@ -9,7 +9,8 @@ def install_package(package):
     try:
         subprocess.check_call([sys.executable, "-m", "pip", "install", package])
         return True
-    except subprocess.CalledProcessError:
+    except subprocess.CalledProcessError as e:
+        print(f"Error installing package {package}: {e}")
         return False
 
 def check_and_install_dependencies():
@@ -219,7 +220,8 @@ class RustAFKHourAdder:
                 sock.close()
                 # If no exception, server is likely reachable
                 return True
-            except:
+            except Exception as e:
+                print(f"Error in UDP ping for {ip}:{port}: {e}")
                 pass
             
             # Method 3: Try TCP connection on query port (usually game_port + 1)
@@ -231,7 +233,8 @@ class RustAFKHourAdder:
                 sock.close()
                 if result == 0:
                     return True
-            except:
+            except Exception as e:
+                print(f"Error in TCP ping for {ip}:{query_port}: {e}")
                 pass
             
             # Method 4: Try ICMP ping to the IP
@@ -245,12 +248,14 @@ class RustAFKHourAdder:
                 
                 result = subprocess.run(command, capture_output=True, text=True, timeout=timeout + 2)
                 return result.returncode == 0
-            except:
+            except Exception as e:
+                print(f"Error in ICMP ping for {ip}: {e}")
                 pass
             
             return False  # All methods failed
             
         except Exception as e:
+            print(f"Error in ping_server for {server_ip}: {e}")
             return False
     
     def check_server_battlemetrics(self, server_ip, timeout=10, server_name=None):
@@ -298,7 +303,7 @@ class RustAFKHourAdder:
                     resolved_ip = original_ip
             
             def extract_server_info(server):
-                """Helper function to extract server info"""
+                """Helper function to extract server info - ONLY fields we want to update"""
                 attributes = server.get('attributes', {})
                 details = attributes.get('details', {})
                 
@@ -309,23 +314,16 @@ class RustAFKHourAdder:
                 ]
                 is_premium = any(indicator in server_name for indicator in premium_indicators)
                 
+                # ONLY return the fields we want to update:
+                # - name, premium, official, modded, country, status, rust_type
                 return {
-                    'battlemetrics_id': server.get('id'),
                     'name': attributes.get('name', 'Unknown'),
                     'status': attributes.get('status'),
-                    'players': attributes.get('players', 0),
-                    'maxPlayers': attributes.get('maxPlayers', 0),
-                    'rank': attributes.get('rank'),
                     'country': attributes.get('country'),
                     'official': details.get('official', False),
                     'premium': is_premium,
                     'modded': details.get('modded', False),
-                    'pve': details.get('pve', False),
-                    'map': details.get('map', 'Unknown'),
-                    'last_updated': attributes.get('updatedAt'),
                     'rust_type': details.get('rust_type'),
-                    'rust_build': details.get('rust_build'),
-                    'serverSteamId': details.get('serverSteamId'),
                 }
             
             # Try multiple search strategies
@@ -569,13 +567,20 @@ class RustAFKHourAdder:
             if hasattr(update_server_info, 'is_running') and update_server_info.is_running:
                 return
             
-            # Set running flag
+            # Set running flag and stop flag
             update_server_info.is_running = True
+            update_server_info.stop_requested = False
+            
+            # Stop function for update process
+            def stop_update():
+                update_server_info.stop_requested = True
+                stop_btn.config(state="disabled", text="Stopping...")
+                status_label.config(text="Stopping server update...")
             
             # Disable buttons during update
             start_btn.config(state="disabled")
             update_info_btn.config(state="disabled", text="Updating...")
-            stop_btn.config(state="disabled")
+            stop_btn.config(state="normal", command=stop_update)
             remove_offline_btn.config(state="disabled")
             
             progress_var.set(0)
@@ -621,10 +626,15 @@ class RustAFKHourAdder:
                 
                 # Add header
                 validation_window.after(0, lambda: safe_update_gui(lambda: results_text.insert(tk.END, "Updating Server Information from BattleMetrics API\n")))
-                validation_window.after(0, lambda: safe_update_gui(lambda: results_text.insert(tk.END, "STATUS   | PLAYERS | RANK | SERVER NAME\n")))
-                validation_window.after(0, lambda: safe_update_gui(lambda: results_text.insert(tk.END, "-" * 80 + "\n")))
+                validation_window.after(0, lambda: safe_update_gui(lambda: results_text.insert(tk.END, "STATUS   | SERVER NAME\n")))
+                validation_window.after(0, lambda: safe_update_gui(lambda: results_text.insert(tk.END, "-" * 50 + "\n")))
                 
                 for i, server in enumerate(self.servers):
+                    # Check if stop was requested
+                    if update_server_info.stop_requested:
+                        validation_window.after(0, lambda: safe_update_gui(lambda: status_label.config(text="Server update stopped by user")))
+                        break
+                    
                     server_name = server.get('name', 'Unknown')
                     server_ip = server.get('ip', '')
                     
@@ -638,13 +648,24 @@ class RustAFKHourAdder:
                     server_info = None
                     max_retries = 3
                     for retry in range(max_retries):
+                        # Check if stop was requested during retries
+                        if update_server_info.stop_requested:
+                            break
+                            
                         server_info = self.get_server_info_battlemetrics(server_ip, timeout=15, server_name=server_name)
                         if server_info is not None:
                             break
                         elif retry < max_retries - 1:
                             # Wait longer between retries to avoid rate limiting
-                            time.sleep(5)
+                            for sleep_second in range(5):
+                                if update_server_info.stop_requested:
+                                    break
+                                time.sleep(1)
                             validation_window.after(0, lambda name=server_name, r=retry: safe_update_gui(lambda: status_label.config(text=f"Retrying {name}... (attempt {r+2})")))
+                    
+                    # Skip processing if stop was requested
+                    if update_server_info.stop_requested:
+                        break
                     
                     if server_info is None:
                         validation_window.after(0, lambda name=server_name: safe_update_gui(lambda: status_label.config(text=f"Failed to get info for {name} after {max_retries} attempts")))
@@ -655,56 +676,92 @@ class RustAFKHourAdder:
                     if server_info:
                         found_count += 1
                         
-                        # Update server with new information
+                        # Update server with new information (only specific fields)
                         updated_server = server.copy()
                         
+                        # Only update these specific fields from BattleMetrics:
+                        # - name (if BattleMetrics has a better name)
+                        # - premium status
+                        # - official status  
+                        # - modded status
+                        # - country
+                        # - status (online/offline)
+                        # - rust_type
+                        
+                        updated_fields = []
+                        
                         # Update name if BattleMetrics has a different/better name
-                        if server_info.get('name') and server_info['name'] != 'Unknown':
+                        if server_info.get('name') and server_info['name'] != 'Unknown' and server_info['name'] != updated_server.get('name'):
+                            old_name = updated_server.get('name', 'Unknown')
                             updated_server['name'] = server_info['name']
+                            updated_fields.append(f"name: '{old_name}' -> '{server_info['name']}'")
                         
-                        # Update all the new fields
-                        updated_server.update({
-                            'battlemetrics_id': server_info.get('battlemetrics_id'),
-                            'official': server_info.get('official', False),
-                            'premium': server_info.get('premium', False),
-                            'modded': server_info.get('modded', False),
-                            'pve': server_info.get('pve', False),
-                            'country': server_info.get('country'),
-                            'rank': server_info.get('rank'),
-                            'map': server_info.get('map'),
-                            'max_players': server_info.get('maxPlayers'),
-                            'current_players': server_info.get('players'),
-                            'status': server_info.get('status'),
-                            'last_info_update': time.strftime('%Y-%m-%d %H:%M:%S'),
-                            'rust_type': server_info.get('rust_type'),
-                            'serverSteamId': server_info.get('serverSteamId')
-                        })
+                        # Update only the allowed fields
+                        if server_info.get('premium') is not None and server_info.get('premium') != updated_server.get('premium'):
+                            old_premium = updated_server.get('premium', False)
+                            updated_server['premium'] = server_info.get('premium', False)
+                            updated_fields.append(f"premium: {old_premium} -> {server_info.get('premium', False)}")
                         
-                        # Format display info
-                        players_info = f"{server_info.get('players', 0)}/{server_info.get('maxPlayers', 0)}"
-                        rank_info = f"#{server_info.get('rank', 'N/A')}"
+                        if server_info.get('official') is not None and server_info.get('official') != updated_server.get('official'):
+                            old_official = updated_server.get('official', False)
+                            updated_server['official'] = server_info.get('official', False)
+                            updated_fields.append(f"official: {old_official} -> {server_info.get('official', False)}")
+                        
+                        if server_info.get('modded') is not None and server_info.get('modded') != updated_server.get('modded'):
+                            old_modded = updated_server.get('modded', False)
+                            updated_server['modded'] = server_info.get('modded', False)
+                            updated_fields.append(f"modded: {old_modded} -> {server_info.get('modded', False)}")
+                        
+                        if server_info.get('country') and server_info.get('country') != updated_server.get('country'):
+                            old_country = updated_server.get('country', 'Unknown')
+                            updated_server['country'] = server_info.get('country')
+                            updated_fields.append(f"country: '{old_country}' -> '{server_info.get('country')}'")
+                        
+                        if server_info.get('status') and server_info.get('status') != updated_server.get('status'):
+                            old_status = updated_server.get('status', 'Unknown')
+                            updated_server['status'] = server_info.get('status')
+                            updated_fields.append(f"status: '{old_status}' -> '{server_info.get('status')}'")
+                        
+                        if server_info.get('rust_type') and server_info.get('rust_type') != updated_server.get('rust_type'):
+                            old_rust_type = updated_server.get('rust_type', 'Unknown')
+                            updated_server['rust_type'] = server_info.get('rust_type')
+                            updated_fields.append(f"rust_type: '{old_rust_type}' -> '{server_info.get('rust_type')}'")
+                        
+                        # Always update the last update timestamp
+                        updated_server['last_info_update'] = time.strftime('%Y-%m-%d %H:%M:%S')
+                        
+                        # Log what fields were updated
+                        if updated_fields:
+                            self.log_status(f"Updated {server_name}: {', '.join(updated_fields)}")
+                        else:
+                            self.log_status(f"No changes needed for {server_name} - all fields up to date")
+                        
+                        # Preserve all other existing fields (ip, battlemetrics_id, pve, rank, map, max_players, etc.)
+                        
+                        # Format display info (simplified since we don't get player/rank data)
+                        players_info = "N/A"  # We don't fetch this data anymore
+                        rank_info = "N/A"     # We don't fetch this data anymore
                         status_info = "UPDATED"
                         
-                        # Show official/premium indicators
+                        # Show official/premium indicators (use updated server data)
                         indicators = []
-                        if server_info.get('official'):
+                        if updated_server.get('official'):
                             indicators.append("OFFICIAL")
-                        if server_info.get('premium'):
+                        if updated_server.get('premium'):
                             indicators.append("PREMIUM")
-                        if server_info.get('modded'):
+                        if updated_server.get('modded'):
                             indicators.append("MODDED")
-                        if server_info.get('pve'):
-                            indicators.append("PVE")
+                        # Don't show PVE since we're not updating that field
                         
                         indicator_text = f" [{', '.join(indicators)}]" if indicators else ""
                         
-                        result_line = f"{status_info:<8} | {players_info:<7} | {rank_info:<6} | {updated_server['name']}{indicator_text}\n"
+                        result_line = f"{status_info:<8} | {updated_server['name']}{indicator_text}\n"
                         
                         updated_servers.append(updated_server)
                         
                     else:
                         # Keep original server if not found on BattleMetrics
-                        result_line = f"{'NOT FOUND':<8} | {'N/A':<7} | {'N/A':<6} | {server_name}\n"
+                        result_line = f"{'NOT FOUND':<8} | {server_name}\n"
                         updated_servers.append(server)
                     
                     # Update results display
@@ -718,31 +775,40 @@ class RustAFKHourAdder:
                     validation_window.after(0, lambda: safe_update_gui(lambda: progress_var.set(progress_var.get() + 1)))
                     
                     # Rate limiting - be nice to the API
-                    if i < len(self.servers) - 1:
-                        time.sleep(3)  # 3 second delay between requests to avoid rate limiting
+                    if i < len(self.servers) - 1 and not update_server_info.stop_requested:
+                        # Break the sleep into smaller chunks so we can respond to stop requests
+                        for sleep_second in range(3):
+                            if update_server_info.stop_requested:
+                                break
+                            time.sleep(1)
                 
-                # Save updated servers
-                self.servers = updated_servers
-                self.save_servers()
-                
-                # Update the main server list display
-                validation_window.after(0, lambda: safe_update_gui(lambda: self.update_server_list()))
+                # Save updated servers (only if not stopped)
+                if not update_server_info.stop_requested:
+                    self.servers = updated_servers
+                    self.save_servers()
+                    
+                    # Update the main server list display
+                    validation_window.after(0, lambda: safe_update_gui(lambda: self.update_server_list()))
                 
                 # Calculate final timing
                 total_elapsed = time.time() - update_start_time
                 elapsed_str = f"{int(total_elapsed//60):02d}:{int(total_elapsed%60):02d}"
                 
-                # Update final status
-                validation_window.after(0, lambda: safe_update_gui(lambda: status_label.config(text=f"Update complete! Found {found_count}/{len(self.servers)} servers in {elapsed_str}")))
+                # Update final status based on whether it was stopped or completed
+                if update_server_info.stop_requested:
+                    validation_window.after(0, lambda: safe_update_gui(lambda: status_label.config(text=f"Update stopped by user after {elapsed_str} - {completed_updates} servers processed")))
+                    self.log_status(f"Server update stopped by user after {elapsed_str} - {completed_updates} servers processed")
+                else:
+                    validation_window.after(0, lambda: safe_update_gui(lambda: status_label.config(text=f"Update complete! Found {found_count}/{len(self.servers)} servers in {elapsed_str}")))
+                    self.log_status(f"Updated server info for {found_count}/{len(self.servers)} servers from BattleMetrics")
+                
                 validation_window.after(0, lambda: safe_update_gui(lambda: eta_label.config(text="ETA: Complete")))
                 validation_window.after(0, lambda: safe_update_gui(lambda: start_btn.config(state="normal")))
                 validation_window.after(0, lambda: safe_update_gui(lambda: update_info_btn.config(state="normal", text="Update Server Info")))
+                validation_window.after(0, lambda: safe_update_gui(lambda: stop_btn.config(state="disabled", text="Stop")))
                 
                 # Clear running flag
                 update_server_info.is_running = False
-                
-                # Log completion (no popup)
-                self.log_status(f"Updated server info for {found_count}/{len(self.servers)} servers from BattleMetrics")
             
             # Start update thread
             update_thread_obj = threading.Thread(target=update_thread, daemon=True)
@@ -894,7 +960,15 @@ class RustAFKHourAdder:
                                     f.cancel()
                                 break
                         except Exception as e:
-                            print(f"Error validating server: {e}")
+                            error_msg = f"Error validating server: {e}"
+                            print(error_msg)
+                            # Try to log to file if possible
+                            try:
+                                with open(os.path.join("data", "afk_log.txt"), "a", encoding="utf-8") as f:
+                                    timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                                    f.write(f"[{timestamp}] {error_msg}\n")
+                            except:
+                                pass
                 
                 # Calculate final timing
                 total_elapsed = time.time() - validation_start_time
@@ -1071,7 +1145,9 @@ Enhanced with BattleMetrics API integration"""
             # Show menu
             context_menu.tk_popup(event.x_root, event.y_root)
         except Exception as e:
-            print(f"Error showing context menu: {e}")
+            error_msg = f"Error showing context menu: {e}"
+            print(error_msg)
+            self.log_status(error_msg)
     
     def get_filtered_servers(self):
         """Get servers based on current filter"""
@@ -1845,8 +1921,9 @@ Enhanced with BattleMetrics API integration"""
                 
             self.settings["pause_time"] = pause_seconds
             self.save_settings()
-        except Exception:
-            pass  # Ignore errors during dropdown change
+        except Exception as e:
+            self.log_status(f"Error during dropdown change: {e}")
+            pass  # Continue despite errors during dropdown change
     
     def on_dropdown_change(self, dropdown_name):
         """Handle dropdown change and save settings"""
@@ -1958,8 +2035,9 @@ Enhanced with BattleMetrics API integration"""
                         self.server_listbox.selection_set(display_index)
                         self.server_listbox.see(display_index)
                         break
-        except Exception:
-            pass  # Ignore errors during selection restoration
+        except Exception as e:
+            self.log_status(f"Error during selection restoration: {e}")
+            pass  # Continue despite errors during selection restoration
     
     def save_settings(self):
         settings_file = os.path.join(self.data_folder, "settings.json")
@@ -2102,13 +2180,38 @@ Enhanced with BattleMetrics API integration"""
         timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         log_message = f"[{timestamp}] {message}"
         
-        try:
-            with open(self.log_file, "a", encoding="utf-8") as f:
-                f.write(log_message + "\n")
-        except Exception as e:
-            print(f"Error writing to log file: {e}")
-        
+        # Always print to console first
         print(log_message)
+        
+        # Try to write to log file with multiple fallback attempts
+        max_attempts = 3
+        for attempt in range(max_attempts):
+            try:
+                # Ensure data directory exists
+                os.makedirs(self.data_folder, exist_ok=True)
+                
+                with open(self.log_file, "a", encoding="utf-8") as f:
+                    f.write(log_message + "\n")
+                    f.flush()  # Ensure data is written immediately
+                break  # Success, exit retry loop
+                
+            except Exception as e:
+                if attempt == max_attempts - 1:  # Last attempt
+                    print(f"CRITICAL: Failed to write to log file after {max_attempts} attempts: {e}")
+                    print(f"Log file path: {self.log_file}")
+                    # Try to create a backup log in current directory
+                    try:
+                        backup_log = "emergency_log.txt"
+                        with open(backup_log, "a", encoding="utf-8") as f:
+                            f.write(f"[EMERGENCY LOG] {log_message}\n")
+                            f.write(f"[EMERGENCY LOG] Original log file error: {e}\n")
+                        print(f"Emergency log created: {backup_log}")
+                    except Exception as backup_error:
+                        print(f"Could not create emergency log: {backup_error}")
+                else:
+                    # Wait a bit before retrying
+                    import time
+                    time.sleep(0.1)
     
 
     
@@ -2337,8 +2440,10 @@ Enhanced with BattleMetrics API integration"""
                 self.pause_var.set("10 min")
                 
             self.settings["pause_time"] = pause_minutes * 60
-        except Exception:
-            messagebox.showerror("Error", "Invalid AFK loop interval")
+        except Exception as e:
+            error_msg = f"Invalid AFK loop interval: {e}"
+            self.log_status(error_msg)
+            messagebox.showerror("Error", error_msg)
             return
         
         # Check server selection or rotation setup
@@ -2563,56 +2668,66 @@ Enhanced with BattleMetrics API integration"""
     
     def switch_to_next_server(self):
         """Switch to the next server in rotation"""
-        if not self.settings["server_switching"]["selected_servers"]:
-            self.log_status("WARNING: No servers configured for rotation")
-            return
-        
-        switch_start = datetime.now()
-        self.log_status("=== AUTO SERVER SWITCHING INITIATED ===")
-        
-        # Find current server index in rotation
-        current_server_name = self.selected_server['name']
-        rotation_servers = self.settings["server_switching"]["selected_servers"]
-        
-        self.log_status(f"Current server: {current_server_name}")
-        self.log_status(f"Available servers in rotation: {len(rotation_servers)}")
-        
-        # Pick a random different server from rotation
-        available_servers = [i for i in rotation_servers if self.servers[i]['name'] != current_server_name]
-        if not available_servers:
-            available_servers = rotation_servers  # If only one server, use it
-            self.log_status("WARNING: Only one server in rotation, staying on same server")
-        
-        next_server_index = random.choice(available_servers)
-        old_server = self.selected_server
-        self.selected_server = self.servers[next_server_index]
-        self.current_server_start_time = datetime.now()
-        
-        self.log_status(f"Switching FROM: {old_server['name']} ({old_server['ip']})")
-        self.log_status(f"Switching TO: {self.selected_server['name']} ({self.selected_server['ip']})")
-        
-        # Disconnect from current server first
-        self.log_status("SWITCH STEP 1: Disconnecting from current server")
-        self.log_status("   Opening console (F1 key)")
-        pyautogui.press('f1')
-        time.sleep(1)
-        
-        self.log_status("   Typing command: 'client.disconnect'")
-        self.type_command("client.disconnect")
-        self.log_status("   Pressing Enter to execute disconnect")
-        pyautogui.press('enter')
-        time.sleep(1)
-        
-        self.log_status("   Closing console (F1 key)")
-        pyautogui.press('f1')
-        self.log_status("   Waiting 5 seconds for disconnect to complete...")
-        time.sleep(5)  # Wait for disconnect to complete
-        
-        switch_duration = (datetime.now() - switch_start).total_seconds()
-        self.log_status(f"SERVER SWITCH COMPLETED in {switch_duration:.1f}s")
-        
-        # Setup next switch
-        self.setup_next_server_switch()
+        try:
+            if not self.settings["server_switching"]["selected_servers"]:
+                self.log_status("WARNING: No servers configured for rotation")
+                return
+            
+            switch_start = datetime.now()
+            self.log_status("=== AUTO SERVER SWITCHING INITIATED ===")
+            
+            # Find current server index in rotation
+            current_server_name = self.selected_server['name']
+            rotation_servers = self.settings["server_switching"]["selected_servers"]
+            
+            self.log_status(f"Current server: {current_server_name}")
+            self.log_status(f"Available servers in rotation: {len(rotation_servers)}")
+            
+            # Pick a random different server from rotation
+            available_servers = [i for i in rotation_servers if self.servers[i]['name'] != current_server_name]
+            if not available_servers:
+                available_servers = rotation_servers  # If only one server, use it
+                self.log_status("WARNING: Only one server in rotation, staying on same server")
+            
+            next_server_index = random.choice(available_servers)
+            old_server = self.selected_server
+            self.selected_server = self.servers[next_server_index]
+            self.current_server_start_time = datetime.now()
+            
+            self.log_status(f"Switching FROM: {old_server['name']} ({old_server['ip']})")
+            self.log_status(f"Switching TO: {self.selected_server['name']} ({self.selected_server['ip']})")
+            
+            # Disconnect from current server first
+            self.log_status("SWITCH STEP 1: Disconnecting from current server")
+            self.log_status("   Opening console (F1 key)")
+            pyautogui.press('f1')
+            time.sleep(1)
+            
+            self.log_status("   Typing command: 'client.disconnect'")
+            self.type_command("client.disconnect")
+            self.log_status("   Pressing Enter to execute disconnect")
+            pyautogui.press('enter')
+            time.sleep(1)
+            
+            self.log_status("   Closing console (F1 key)")
+            pyautogui.press('f1')
+            self.log_status("   Waiting 5 seconds for disconnect to complete...")
+            time.sleep(5)  # Wait for disconnect to complete
+            
+            switch_duration = (datetime.now() - switch_start).total_seconds()
+            self.log_status(f"SERVER SWITCH COMPLETED in {switch_duration:.1f}s")
+            
+            # Setup next switch
+            self.setup_next_server_switch()
+            
+        except Exception as e:
+            error_msg = f"Error during server switching: {e}"
+            self.log_status(error_msg)
+            # Try to setup next switch anyway to prevent getting stuck
+            try:
+                self.setup_next_server_switch()
+            except Exception as setup_error:
+                self.log_status(f"Error setting up next server switch: {setup_error}")
     
     def countdown_and_start(self):
         self.log_status("=== STARTING COUNTDOWN SEQUENCE ===")
@@ -3202,7 +3317,8 @@ Enhanced with BattleMetrics API integration"""
                         window.activate()  # Double activate
                         self.log_status(f"SUCCESS: Activated '{window.title}'")
                         return True
-                    except Exception:
+                    except Exception as e:
+                        self.log_status(f"Error activating window '{window.title}': {e}")
                         continue
             
             self.log_status("METHOD 2: No suitable windows found")
@@ -3256,7 +3372,8 @@ Enhanced with BattleMetrics API integration"""
                     try:
                         pyautogui.click(x_offset, taskbar_y)
                         time.sleep(0.2)
-                    except:
+                    except Exception as e:
+                        self.log_status(f"Error clicking taskbar button: {e}")
                         continue
             
             self.log_status("METHOD 4: Attempted taskbar clicks")
@@ -3312,31 +3429,36 @@ Enhanced with BattleMetrics API integration"""
     
     def type_command(self, text):
         """Type command based on global typing mode setting"""
-        typing_mode = self.settings.get("typing_mode", "human")
-        
-        if typing_mode == "bot":
-            # Bot mode: Instant paste
-            pyautogui.write(text)
-            self.log_status(f"   Pasted '{text}' (bot mode)")
-        else:
-            # Human mode: Realistic typing
-            typing_start = datetime.now()
-            char_count = len(text)
+        try:
+            typing_mode = self.settings.get("typing_mode", "human")
             
-            for i, char in enumerate(text):
-                # Check if any active process should be stopped
-                if not self.is_running and not self.is_adding_servers:
-                    self.log_status(f"WARNING: Typing interrupted at character {i+1}/{char_count}")
-                    return
+            if typing_mode == "bot":
+                # Bot mode: Instant paste
+                pyautogui.write(text)
+                self.log_status(f"   Pasted '{text}' (bot mode)")
+            else:
+                # Human mode: Realistic typing
+                typing_start = datetime.now()
+                char_count = len(text)
                 
-                pyautogui.write(char)
-                # Random delay between 0.05 and 0.15 seconds for human-like typing
-                delay = 0.05 + (time.time() % 0.1)
-                time.sleep(delay)
-            
-            typing_duration = (datetime.now() - typing_start).total_seconds()
-            avg_char_time = typing_duration / char_count if char_count > 0 else 0
-            self.log_status(f"   Typed '{text}' ({char_count} chars in {typing_duration:.2f}s, avg: {avg_char_time:.3f}s/char)")
+                for i, char in enumerate(text):
+                    # Check if any active process should be stopped
+                    if not self.is_running and not self.is_adding_servers:
+                        self.log_status(f"WARNING: Typing interrupted at character {i+1}/{char_count}")
+                        return
+                    
+                    pyautogui.write(char)
+                    # Random delay between 0.05 and 0.15 seconds for human-like typing
+                    delay = 0.05 + (time.time() % 0.1)
+                    time.sleep(delay)
+                
+                typing_duration = (datetime.now() - typing_start).total_seconds()
+                avg_char_time = typing_duration / char_count if char_count > 0 else 0
+                self.log_status(f"   Typed '{text}' ({char_count} chars in {typing_duration:.2f}s, avg: {avg_char_time:.3f}s/char)")
+                
+        except Exception as e:
+            error_msg = f"Error typing command '{text}': {e}"
+            self.log_status(error_msg)
     
     def stop_afk(self, play_beep=True):
         stop_time = datetime.now()
@@ -4042,5 +4164,19 @@ if __name__ == "__main__":
         app = RustAFKHourAdder()
         app.run()
     except Exception as e:
-        print(f"Error starting application: {e}")
+        error_msg = f"Error starting application: {e}"
+        print(error_msg)
+        
+        # Try to log the startup error to file
+        try:
+            import os
+            from datetime import datetime
+            log_file = os.path.join("data", "afk_log.txt")
+            os.makedirs("data", exist_ok=True)
+            with open(log_file, "a", encoding="utf-8") as f:
+                timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                f.write(f"[{timestamp}] CRITICAL ERROR: {error_msg}\n")
+        except Exception as log_error:
+            print(f"Could not write error to log file: {log_error}")
+        
         input("Press Enter to exit...")
