@@ -92,6 +92,7 @@ class RustAFKHourAdder:
             "enable_startup_disconnect": False,  # Option to enable initial disconnect command when starting
             "disable_beep": True,  # Option to disable beep sounds
             "auto_check_updates": True,  # Option to automatically check for updates on startup
+            "auto_update": False,  # Option to automatically download and install updates
             "minimal_activity": False,  # Option to enable minimal activity mode (19min + kill after movement)
             "auto_start_rust": True,  # Option to auto start Rust via Steam
             "rust_load_time": "1 min",  # How long to wait for Rust to load
@@ -216,6 +217,12 @@ class RustAFKHourAdder:
         remote_version = remote_data.get("version", "Unknown")
         changelog = remote_data.get("changelog", [])
         
+        # Check if auto-update is enabled
+        if self.settings.get("auto_update", False):
+            self.log_status(f"Auto-update enabled, installing version {remote_version} automatically...")
+            self.start_update_process(None, remote_data)
+            return
+        
         # Create update notification window
         update_window = tk.Toplevel(self.root)
         update_window.title("Update Available")
@@ -287,7 +294,8 @@ class RustAFKHourAdder:
     
     def start_update_process(self, parent_window, remote_data):
         """Start the update process with progress dialog"""
-        parent_window.destroy()
+        if parent_window:
+            parent_window.destroy()
         
         # Create progress window
         progress_window = tk.Toplevel(self.root)
@@ -2463,9 +2471,14 @@ GitHub: https://github.com/{self.github_repo}"""
         # Update checking settings
         self.auto_check_updates_var = tk.BooleanVar(value=self.settings.get("auto_check_updates", True))
         tk.Checkbutton(system_frame, text="Check for updates on startup", 
-                      variable=self.auto_check_updates_var, command=self.on_auto_update_change).pack(anchor="w", pady=2)
+                      variable=self.auto_check_updates_var, command=self.on_auto_update_check_change).pack(anchor="w", pady=2)
         
-        update_note = tk.Label(system_frame, text="Automatically check for new versions when the program starts", 
+        # Auto update settings
+        self.auto_update_var = tk.BooleanVar(value=self.settings.get("auto_update", False))
+        tk.Checkbutton(system_frame, text="Automatically install updates (no confirmation)", 
+                      variable=self.auto_update_var, command=self.on_auto_update_change).pack(anchor="w", pady=2)
+        
+        update_note = tk.Label(system_frame, text="Automatically check and optionally install new versions when available", 
                               font=("Arial", 8), wraplength=350, fg="gray")
         update_note.pack(anchor="w", padx=20, pady=2)
         
@@ -2978,11 +2991,18 @@ GitHub: https://github.com/{self.github_repo}"""
         self.log_status(f"Beep sounds: {status}")
         self.save_settings()
     
-    def on_auto_update_change(self):
+    def on_auto_update_check_change(self):
         """Handle auto check updates checkbox change"""
         self.settings["auto_check_updates"] = self.auto_check_updates_var.get()
         status = "ENABLED" if self.auto_check_updates_var.get() else "DISABLED"
         self.log_status(f"Automatic update checking: {status}")
+        self.save_settings()
+    
+    def on_auto_update_change(self):
+        """Handle auto update checkbox change"""
+        self.settings["auto_update"] = self.auto_update_var.get()
+        status = "ENABLED" if self.auto_update_var.get() else "DISABLED"
+        self.log_status(f"Automatic updates: {status}")
         self.save_settings()
     
     def on_auto_start_rust_change(self):
