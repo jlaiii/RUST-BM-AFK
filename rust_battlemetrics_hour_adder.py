@@ -1237,73 +1237,7 @@ class RustAFKHourAdder:
     
 
     
-    def import_servers_from_file(self):
-        """Import servers from a JSON file"""
-        from tkinter import filedialog
-        
-        filename = filedialog.askopenfilename(
-            title="Import Servers",
-            filetypes=[("JSON files", "*.json"), ("All files", "*.*")]
-        )
-        
-        if filename:
-            try:
-                with open(filename, 'r') as f:
-                    imported_servers = json.load(f)
-                
-                if not isinstance(imported_servers, list):
-                    messagebox.showerror("Error", "Invalid file format. Expected a list of servers.")
-                    return
-                
-                # Check for duplicates
-                existing_ips = {server.get('ip', '') for server in self.servers}
-                new_servers = []
-                
-                for server in imported_servers:
-                    if isinstance(server, dict) and server.get('ip') not in existing_ips:
-                        # Ensure required fields
-                        if 'name' not in server:
-                            server['name'] = f"Imported Server {len(new_servers) + 1}"
-                        new_servers.append(server)
-                
-                if new_servers:
-                    self.servers.extend(new_servers)
-                    self.save_servers()
-                    self.update_server_list()
-                    messagebox.showinfo("Success", f"Imported {len(new_servers)} new servers!\n"
-                                                  f"Skipped {len(imported_servers) - len(new_servers)} duplicates.")
-                    self.log_status(f"Imported {len(new_servers)} servers from {filename}")
-                else:
-                    messagebox.showinfo("No New Servers", "All servers in the file are already in your list.")
-                    
-            except Exception as e:
-                messagebox.showerror("Error", f"Failed to import servers: {e}")
-                self.log_status(f"Error importing servers: {e}")
-    
-    def export_servers_to_file(self):
-        """Export servers to a JSON file"""
-        from tkinter import filedialog
-        
-        if not self.servers:
-            messagebox.showwarning("No Servers", "No servers to export.")
-            return
-        
-        filename = filedialog.asksaveasfilename(
-            title="Export Servers",
-            defaultextension=".json",
-            filetypes=[("JSON files", "*.json"), ("All files", "*.*")]
-        )
-        
-        if filename:
-            try:
-                with open(filename, 'w') as f:
-                    json.dump(self.servers, f, indent=2)
-                messagebox.showinfo("Success", f"Exported {len(self.servers)} servers to {filename}")
-                self.log_status(f"Exported {len(self.servers)} servers to {filename}")
-            except Exception as e:
-                messagebox.showerror("Error", f"Failed to export servers: {e}")
-                self.log_status(f"Error exporting servers: {e}")
-    
+
     def clear_log(self):
         """Clear the log display"""
         if hasattr(self, 'log_text'):
@@ -1336,7 +1270,6 @@ Features:
 • AFK hour farming with multiple servers
 • Enhanced BattleMetrics integration
 • Server validation and info updates
-• Import/Export server lists
 • Real-time progress tracking
 • Automatic update checking
 
