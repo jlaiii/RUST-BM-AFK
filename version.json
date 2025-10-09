@@ -1,16 +1,38 @@
 {
-  "version": "1.3.2",
+  "version": "1.3.4",
   "release_date": "2025-10-09",
   "download_url": "https://github.com/jlaiii/RUST-BM-AFK/releases/latest",
   "github_url": "https://github.com/jlaiii/RUST-BM-AFK",
   "changelog": [
-    "TEST UPDATE - Verifying auto-update system works correctly",
-    "Testing countdown timer and automatic restart functionality",
-    "Ensuring update notifications appear properly",
-    "Validating download and installation process",
-    "This is a test version to confirm update system reliability"
+    "COMPLETELY FIXED UPDATE SYSTEM - No more local file checking",
+    "Removed ALL duplicate methods that were causing conflicts",
+    "Update system now ONLY uses GitHub - never checks local files",
+    "Fixed changelog to only fetch from GitHub",
+    "Cleaned up all update-related code for reliability"
   ],
   "version_history": [
+    {
+      "version": "1.3.4",
+      "release_date": "2025-10-09",
+      "changelog": [
+        "COMPLETELY FIXED UPDATE SYSTEM - No more local file checking",
+        "Removed ALL duplicate methods that were causing conflicts",
+        "Update system now ONLY uses GitHub - never checks local files",
+        "Fixed changelog to only fetch from GitHub",
+        "Cleaned up all update-related code for reliability"
+      ]
+    },
+    {
+      "version": "1.3.3",
+      "release_date": "2025-10-09",
+      "changelog": [
+        "FIXED UPDATE SYSTEM - Removed duplicate methods causing issues",
+        "Fixed version comparison not working properly",
+        "Added debug logging to track update checking process",
+        "Cleaned up duplicate background_update_check methods",
+        "Update detection should now work correctly"
+      ]
+    },
     {
       "version": "1.3.2",
       "release_date": "2025-10-09",

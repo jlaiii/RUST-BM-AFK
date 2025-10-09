@@ -66,7 +66,7 @@ pyautogui.FAILSAFE = False
 class RustAFKHourAdder:
     def __init__(self):
         # Version information
-        self.current_version = "1.3.2"
+        self.current_version = "1.3.4"
         self.github_repo = "jlaiii/RUST-BM-AFK"
         self.version_url = f"https://raw.githubusercontent.com/{self.github_repo}/main/version.json"
         self.script_url = f"https://raw.githubusercontent.com/{self.github_repo}/main/rust_battlemetrics_hour_adder.py"
@@ -165,12 +165,16 @@ class RustAFKHourAdder:
         """Check for updates in background without blocking UI"""
         def check_updates():
             try:
+                self.log_status(f"Checking for updates from: {self.version_url}")
                 response = requests.get(self.version_url, timeout=10)
                 if response.status_code == 200:
                     remote_data = response.json()
                     remote_version = remote_data.get("version", "0.0.0")
                     
+                    self.log_status(f"Current version: {self.current_version}, Remote version: {remote_version}")
+                    
                     if self.is_newer_version(remote_version, self.current_version):
+                        self.log_status("Update available! Showing notification...")
                         # Schedule UI update on main thread
                         self.root.after(0, lambda: self.show_update_notification(remote_data))
                     else:
@@ -495,18 +499,19 @@ class RustAFKHourAdder:
     def show_changelog(self):
         """Show changelog window"""
         try:
-            # Try to get latest changelog from GitHub
+            # Always get changelog from GitHub - never use local files
+            self.log_status("Fetching changelog from GitHub...")
             response = requests.get(self.version_url, timeout=10)
             if response.status_code == 200:
                 remote_data = response.json()
                 version_history = remote_data.get("version_history", [])
             else:
-                # Fallback to local version file
-                with open("version.json", "r") as f:
-                    local_data = json.load(f)
-                    version_history = local_data.get("version_history", [])
-        except:
-            version_history = [{"version": self.current_version, "changelog": ["Current version"]}]
+                # If GitHub fails, show error instead of using local files
+                messagebox.showerror("Changelog Error", f"Failed to fetch changelog from GitHub: HTTP {response.status_code}")
+                return
+        except Exception as e:
+            messagebox.showerror("Changelog Error", f"Failed to fetch changelog from GitHub: {e}")
+            return
         
         # Create changelog window
         changelog_window = tk.Toplevel(self.root)
@@ -1682,126 +1687,7 @@ GitHub: github.com/{self.github_repo}"""
             self.log_status("Opened data folder")
         except Exception as e:
             messagebox.showerror("Error", f"Failed to open data folder: {e}")
-    
-    def show_changelog(self):
-        """Show full changelog from GitHub"""
-        try:
-            self.log_status("Fetching changelog from GitHub...")
-            
-            # Fetch version info from GitHub
-            response = requests.get(self.version_url, timeout=10)
-            if response.status_code == 200:
-                version_data = response.json()
-                self.log_status(f"GitHub response keys: {list(version_data.keys())}")
-                
-                version_history = version_data.get('version_history', [])
-                
-                # If no version_history, create one from the old format
-                if not version_history:
-                    self.log_status("No version_history found, checking for old format...")
-                    
-                    # Check if it's the old format with just version and changelog
-                    if 'version' in version_data and 'changelog' in version_data:
-                        self.log_status("Found old format, converting to version history...")
-                        version_history = [{
-                            'version': version_data.get('version', 'Unknown'),
-                            'release_date': version_data.get('release_date', 'Unknown'),
-                            'changelog': version_data.get('changelog', [])
-                        }]
-                    else:
-                        messagebox.showinfo("Changelog", "No changelog data found in GitHub response.\n\nPlease upload the updated version.json with version_history to GitHub.")
-                        self.log_status("No changelog data found in GitHub response")
-                        return
-                
-                self.log_status(f"Found {len(version_history)} version(s) in changelog")
-            else:
-                messagebox.showerror("Error", f"Failed to fetch changelog from GitHub.\nStatus code: {response.status_code}")
-                self.log_status(f"Failed to fetch changelog: HTTP {response.status_code}")
-                return
-            
-            # Create changelog window (after successful data fetch)
-            changelog_window = tk.Toplevel(self.root)
-            changelog_window.title("Changelog - Version History (GitHub)")
-            changelog_window.geometry("700x600")
-            changelog_window.resizable(True, True)
-            changelog_window.minsize(500, 400)
-            
-            # Make window modal
-            changelog_window.transient(self.root)
-            changelog_window.grab_set()
-            
-            # Header
-            header_frame = tk.Frame(changelog_window)
-            header_frame.pack(fill="x", padx=20, pady=(20, 10))
-            
-            title_label = tk.Label(header_frame, text="Rust Battlemetrics AFK Tool - Changelog", 
-                                 font=("Arial", 14, "bold"))
-            title_label.pack()
-            
-            subtitle_label = tk.Label(header_frame, text=f"Current Version: {self.current_version} | Source: GitHub", 
-                                    font=("Arial", 10))
-            subtitle_label.pack(pady=(5, 0))
-            
-            # Scrollable text area
-            text_frame = tk.Frame(changelog_window)
-            text_frame.pack(fill="both", expand=True, padx=20, pady=(0, 20))
-            
-            changelog_text = tk.Text(text_frame, font=("Consolas", 10), wrap="word", 
-                                   bg="#f8f9fa", fg="#212529", padx=15, pady=15)
-            scrollbar = tk.Scrollbar(text_frame, orient="vertical", command=changelog_text.yview)
-            changelog_text.config(yscrollcommand=scrollbar.set)
-            
-            changelog_text.pack(side="left", fill="both", expand=True)
-            scrollbar.pack(side="right", fill="y")
-            
-            # Build changelog content
-            changelog_content = ""
-            for i, version_info in enumerate(version_history):
-                version = version_info.get('version', 'Unknown')
-                release_date = version_info.get('release_date', 'Unknown')
-                changes = version_info.get('changelog', [])
-                
-                # Add version header
-                if i > 0:
-                    changelog_content += "\n" + "="*60 + "\n\n"
-                
-                changelog_content += f"Version {version}\n"
-                changelog_content += f"Released: {release_date}\n"
-                changelog_content += "-" * 40 + "\n\n"
-                
-                # Add changes
-                for change in changes:
-                    changelog_content += f"• {change}\n"
-                
-                changelog_content += "\n"
-            
-            # Insert content and make read-only
-            changelog_text.insert("1.0", changelog_content)
-            changelog_text.config(state="disabled")
-            
-            # Close button
-            button_frame = tk.Frame(changelog_window)
-            button_frame.pack(pady=(0, 20))
-            
-            close_btn = tk.Button(button_frame, text="Close", command=changelog_window.destroy,
-                                bg="#6c757d", fg="white", font=("Arial", 10, "bold"),
-                                padx=20, pady=5)
-            close_btn.pack()
-            
-            # Center the window
-            changelog_window.update_idletasks()
-            x = (changelog_window.winfo_screenwidth() // 2) - (changelog_window.winfo_width() // 2)
-            y = (changelog_window.winfo_screenheight() // 2) - (changelog_window.winfo_height() // 2)
-            changelog_window.geometry(f"+{x}+{y}")
-            
-            self.log_status("Changelog displayed successfully from GitHub")
-                
-        except requests.exceptions.RequestException as e:
-            messagebox.showerror("Network Error", f"Failed to connect to GitHub:\n{e}")
-            self.log_status(f"Network error fetching changelog: {e}")
-        except Exception as e:
-            messagebox.showerror("Error", f"Error displaying changelog:\n{e}")
-            self.log_status(f"Error displaying changelog: {e}")
+
 
     def show_about(self):
         """Show about dialog"""
@@ -1826,61 +1712,9 @@ Perfect for building up your Rust profile hours!
 GitHub: github.com/{self.github_repo}"""
         
         messagebox.showinfo("About RUST BM AFK Tool", about_text)
+
     
-    def check_for_updates(self):
-        """Check for updates from GitHub"""
-        try:
-            self.log_status("Checking for updates...")
-            
-            # Fetch version info from GitHub
-            response = requests.get(self.version_url, timeout=10)
-            if response.status_code == 200:
-                remote_version_info = response.json()
-                remote_version = remote_version_info.get("version", "0.0.0")
-                
-                # Compare versions
-                if self.is_newer_version(remote_version, self.current_version):
-                    self.show_update_available_dialog(remote_version_info)
-                else:
-                    messagebox.showinfo("No Updates", 
-                                      f"You are running the latest version ({self.current_version})")
-                    self.log_status("No updates available - you have the latest version")
-            else:
-                messagebox.showerror("Update Check Failed", 
-                                   f"Failed to check for updates. HTTP {response.status_code}")
-                self.log_status(f"Update check failed: HTTP {response.status_code}")
-                
-        except requests.exceptions.RequestException as e:
-            messagebox.showerror("Update Check Failed", 
-                               f"Failed to connect to GitHub:\n{str(e)}")
-            self.log_status(f"Update check failed: {str(e)}")
-        except Exception as e:
-            messagebox.showerror("Update Check Failed", 
-                               f"An error occurred while checking for updates:\n{str(e)}")
-            self.log_status(f"Update check error: {str(e)}")
-    
-    def is_newer_version(self, remote_version, current_version):
-        """Compare version strings to determine if remote is newer"""
-        try:
-            # Split versions into parts and compare
-            remote_parts = [int(x) for x in remote_version.split('.')]
-            current_parts = [int(x) for x in current_version.split('.')]
-            
-            # Pad shorter version with zeros
-            max_len = max(len(remote_parts), len(current_parts))
-            remote_parts.extend([0] * (max_len - len(remote_parts)))
-            current_parts.extend([0] * (max_len - len(current_parts)))
-            
-            # Compare each part
-            for remote_part, current_part in zip(remote_parts, current_parts):
-                if remote_part > current_part:
-                    return True
-                elif remote_part < current_part:
-                    return False
-            
-            return False  # Versions are equal
-        except Exception:
-            return False  # If comparison fails, assume no update needed
+
     
     def show_update_available_dialog(self, version_info):
         """Show dialog when update is available"""
@@ -1984,27 +1818,7 @@ GitHub: github.com/{self.github_repo}"""
             messagebox.showerror("Error", f"Failed to open download page:\n{str(e)}")
             self.log_status(f"Failed to open download page: {str(e)}")
     
-    def background_update_check(self):
-        """Check for updates in background without blocking UI"""
-        def check_updates_thread():
-            try:
-                response = requests.get(self.version_url, timeout=10)
-                if response.status_code == 200:
-                    remote_version_info = response.json()
-                    remote_version = remote_version_info.get("version", "0.0.0")
-                    
-                    if self.is_newer_version(remote_version, self.current_version):
-                        # Schedule the update dialog to show on main thread
-                        self.root.after(0, lambda: self.show_background_update_dialog(remote_version_info))
-                    else:
-                        self.log_status("Background update check: No updates available")
-                else:
-                    self.log_status(f"Background update check failed: HTTP {response.status_code}")
-            except Exception as e:
-                self.log_status(f"Background update check failed: {str(e)}")
-        
-        # Run update check in background thread
-        threading.Thread(target=check_updates_thread, daemon=True).start()
+
     
     def show_background_update_dialog(self, version_info):
         """Show update dialog for background checks with 'Don't ask again' option"""
