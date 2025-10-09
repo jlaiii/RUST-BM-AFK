@@ -66,13 +66,13 @@ pyautogui.FAILSAFE = False
 class RustAFKHourAdder:
     def __init__(self):
         # Version information
-        self.current_version = "1.3.4"
+        self.current_version = "1.3.5"
         self.github_repo = "jlaiii/RUST-BM-AFK"
         self.version_url = f"https://raw.githubusercontent.com/{self.github_repo}/main/version.json"
         self.script_url = f"https://raw.githubusercontent.com/{self.github_repo}/main/rust_battlemetrics_hour_adder.py"
         
         self.root = tk.Tk()
-        self.root.title(f"Rust Battlemetrics AFK Hour Adder Tool v{self.current_version}")
+        self.root.title(f"RUST BM AFK Tool v{self.current_version} - Hour Farming Made Easy")
         self.root.geometry("900x730")  # Slightly taller to show all content
         self.root.resizable(True, True)  # Allow resizing so users can adjust if needed
         self.root.minsize(600, 400)  # Set minimum window size for usability
