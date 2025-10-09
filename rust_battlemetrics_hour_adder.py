@@ -66,9 +66,10 @@ pyautogui.FAILSAFE = False
 class RustAFKHourAdder:
     def __init__(self):
         # Version information
-        self.current_version = "1.0.0"
+        self.current_version = "1.1.0"
         self.github_repo = "jlaiii/RUST-BM-AFK"
         self.version_url = f"https://raw.githubusercontent.com/{self.github_repo}/main/version.json"
+        self.script_url = f"https://raw.githubusercontent.com/{self.github_repo}/main/rust_battlemetrics_hour_adder.py"
         
         self.root = tk.Tk()
         self.root.title(f"Rust Battlemetrics AFK Hour Adder Tool v{self.current_version}")
@@ -99,7 +100,7 @@ class RustAFKHourAdder:
             "boot_wait_time": "4 min",  # How long to wait after Windows boot before starting
             "auto_restart_game": False,  # Option to auto restart game for updates
             "restart_interval": "3h",  # How often to restart the game
-            "typing_mode": "human",  # "human" for realistic typing, "bot" for instant paste
+            "typing_mode": "human",  # "human" for realistic typing, "bot" for instant paste, "kid" for slow with mistakes, "pro" for fast ~90 WPM
             "add_servers_auto_start": True,  # Auto-start Rust for Server History Builder
             "add_servers_time": "1 min",  # Time per server for Server History Builder
             "add_servers_type": "all",  # Server type selection for Server History Builder
@@ -155,8 +156,341 @@ class RustAFKHourAdder:
         help_menu = tk.Menu(menubar, tearoff=0)
         menubar.add_cascade(label="Help", menu=help_menu)
         help_menu.add_command(label="Check for Updates", command=self.check_for_updates)
+        help_menu.add_command(label="View Changelog", command=self.show_changelog)
         help_menu.add_separator()
         help_menu.add_command(label="About", command=self.show_about)
+    
+    def background_update_check(self):
+        """Check for updates in background without blocking UI"""
+        def check_updates():
+            try:
+                response = requests.get(self.version_url, timeout=10)
+                if response.status_code == 200:
+                    remote_data = response.json()
+                    remote_version = remote_data.get("version", "0.0.0")
+                    
+                    if self.is_newer_version(remote_version, self.current_version):
+                        # Schedule UI update on main thread
+                        self.root.after(0, lambda: self.show_update_notification(remote_data))
+                    else:
+                        self.log_status("No updates available")
+                else:
+                    self.log_status(f"Update check failed: HTTP {response.status_code}")
+            except Exception as e:
+                self.log_status(f"Background update check failed: {e}")
+        
+        # Run in background thread
+        threading.Thread(target=check_updates, daemon=True).start()
+    
+    def check_for_updates(self):
+        """Manual update check with user feedback"""
+        try:
+            self.log_status("Checking for updates...")
+            response = requests.get(self.version_url, timeout=10)
+            
+            if response.status_code == 200:
+                remote_data = response.json()
+                remote_version = remote_data.get("version", "0.0.0")
+                
+                if self.is_newer_version(remote_version, self.current_version):
+                    self.show_update_notification(remote_data)
+                else:
+                    messagebox.showinfo("No Updates", f"You're running the latest version ({self.current_version})")
+            else:
+                messagebox.showerror("Update Check Failed", f"Failed to check for updates: HTTP {response.status_code}")
+                
+        except Exception as e:
+            messagebox.showerror("Update Check Failed", f"Failed to check for updates: {e}")
+    
+    def is_newer_version(self, remote_version, current_version):
+        """Compare version strings (semantic versioning)"""
+        try:
+            def version_tuple(v):
+                return tuple(map(int, v.split('.')))
+            return version_tuple(remote_version) > version_tuple(current_version)
+        except:
+            return False
+    
+    def show_update_notification(self, remote_data):
+        """Show update notification dialog with options"""
+        remote_version = remote_data.get("version", "Unknown")
+        changelog = remote_data.get("changelog", [])
+        
+        # Create update notification window
+        update_window = tk.Toplevel(self.root)
+        update_window.title("Update Available")
+        update_window.geometry("500x400")
+        update_window.resizable(False, False)
+        update_window.transient(self.root)
+        update_window.grab_set()
+        
+        # Center the window
+        update_window.geometry("+%d+%d" % (self.root.winfo_rootx() + 50, self.root.winfo_rooty() + 50))
+        
+        # Header
+        header_frame = tk.Frame(update_window, bg="#2c3e50")
+        header_frame.pack(fill="x", pady=(0, 10))
+        
+        tk.Label(header_frame, text="🚀 Update Available!", 
+                font=("Arial", 16, "bold"), fg="white", bg="#2c3e50").pack(pady=10)
+        
+        # Version info
+        info_frame = tk.Frame(update_window)
+        info_frame.pack(fill="x", padx=20, pady=10)
+        
+        tk.Label(info_frame, text=f"Current Version: {self.current_version}", 
+                font=("Arial", 11)).pack(anchor="w")
+        tk.Label(info_frame, text=f"New Version: {remote_version}", 
+                font=("Arial", 11, "bold"), fg="#27ae60").pack(anchor="w")
+        
+        # Changelog
+        changelog_frame = tk.LabelFrame(update_window, text="What's New", padx=10, pady=5)
+        changelog_frame.pack(fill="both", expand=True, padx=20, pady=10)
+        
+        changelog_text = tk.Text(changelog_frame, height=8, wrap="word", font=("Arial", 10))
+        scrollbar = tk.Scrollbar(changelog_frame, command=changelog_text.yview)
+        changelog_text.config(yscrollcommand=scrollbar.set)
+        
+        changelog_text.pack(side="left", fill="both", expand=True)
+        scrollbar.pack(side="right", fill="y")
+        
+        # Add changelog content
+        if changelog:
+            for item in changelog:
+                changelog_text.insert("end", f"• {item}\n")
+        else:
+            changelog_text.insert("end", "No changelog available for this version.")
+        
+        changelog_text.config(state="disabled")
+        
+        # Buttons
+        button_frame = tk.Frame(update_window)
+        button_frame.pack(fill="x", padx=20, pady=20)
+        
+        # Update button
+        update_btn = tk.Button(button_frame, text="Update Now", 
+                              bg="#27ae60", fg="white", font=("Arial", 11, "bold"),
+                              command=lambda: self.start_update_process(update_window, remote_data))
+        update_btn.pack(side="left", padx=(0, 10))
+        
+        # View on GitHub button
+        github_btn = tk.Button(button_frame, text="View on GitHub", 
+                              bg="#3498db", fg="white", font=("Arial", 11),
+                              command=lambda: webbrowser.open(remote_data.get("github_url", f"https://github.com/{self.github_repo}")))
+        github_btn.pack(side="left", padx=(0, 10))
+        
+        # Later button
+        later_btn = tk.Button(button_frame, text="Maybe Later", 
+                             bg="#95a5a6", fg="white", font=("Arial", 11),
+                             command=update_window.destroy)
+        later_btn.pack(side="right")
+    
+    def start_update_process(self, parent_window, remote_data):
+        """Start the update process with progress dialog"""
+        parent_window.destroy()
+        
+        # Create progress window
+        progress_window = tk.Toplevel(self.root)
+        progress_window.title("Updating...")
+        progress_window.geometry("400x200")
+        progress_window.resizable(False, False)
+        progress_window.transient(self.root)
+        progress_window.grab_set()
+        
+        # Center the window
+        progress_window.geometry("+%d+%d" % (self.root.winfo_rootx() + 100, self.root.winfo_rooty() + 100))
+        
+        # Progress content
+        tk.Label(progress_window, text="Updating RUST BM AFK Tool...", 
+                font=("Arial", 14, "bold")).pack(pady=20)
+        
+        progress_var = tk.DoubleVar()
+        progress_bar = ttk.Progressbar(progress_window, variable=progress_var, maximum=100)
+        progress_bar.pack(fill="x", padx=40, pady=10)
+        
+        status_label = tk.Label(progress_window, text="Preparing update...", font=("Arial", 10))
+        status_label.pack(pady=10)
+        
+        def update_progress(value, text):
+            progress_var.set(value)
+            status_label.config(text=text)
+            progress_window.update()
+        
+        def perform_update():
+            try:
+                # Step 1: Download new version
+                update_progress(20, "Downloading new version...")
+                response = requests.get(self.script_url, timeout=30)
+                
+                if response.status_code != 200:
+                    raise Exception(f"Download failed: HTTP {response.status_code}")
+                
+                update_progress(50, "Preparing installation...")
+                
+                # Step 2: Create backup
+                script_path = os.path.abspath(__file__)
+                backup_path = script_path + ".backup"
+                
+                if os.path.exists(backup_path):
+                    os.remove(backup_path)
+                
+                import shutil
+                shutil.copy2(script_path, backup_path)
+                
+                update_progress(70, "Installing update...")
+                
+                # Step 3: Write new version
+                with open(script_path, 'w', encoding='utf-8') as f:
+                    f.write(response.text)
+                
+                update_progress(90, "Finalizing...")
+                
+                # Step 4: Update version file
+                new_version_data = {
+                    "version": remote_data.get("version", "1.0.0"),
+                    "release_date": remote_data.get("release_date", datetime.now().strftime("%Y-%m-%d")),
+                    "download_url": remote_data.get("download_url", ""),
+                    "github_url": remote_data.get("github_url", f"https://github.com/{self.github_repo}"),
+                    "changelog": remote_data.get("changelog", []),
+                    "version_history": remote_data.get("version_history", [])
+                }
+                
+                version_file = "version.json"
+                with open(version_file, 'w') as f:
+                    json.dump(new_version_data, f, indent=2)
+                
+                update_progress(100, "Update complete!")
+                
+                # Step 5: Show success and restart
+                time.sleep(1)
+                progress_window.destroy()
+                
+                # Show success message
+                result = messagebox.askyesno("Update Complete", 
+                    f"Successfully updated to version {remote_data.get('version')}!\n\n"
+                    "The application will now restart to apply changes.\n\n"
+                    "Restart now?")
+                
+                if result:
+                    self.restart_application()
+                
+            except Exception as e:
+                progress_window.destroy()
+                messagebox.showerror("Update Failed", f"Failed to update: {e}\n\nPlease try again or download manually from GitHub.")
+        
+        # Start update in background
+        threading.Thread(target=perform_update, daemon=True).start()
+    
+    def restart_application(self):
+        """Restart the application"""
+        try:
+            # Save current state
+            self.save_settings()
+            
+            # Get the script path
+            script_path = os.path.abspath(__file__)
+            
+            # Close current application
+            self.root.quit()
+            self.root.destroy()
+            
+            # Restart using subprocess
+            if getattr(sys, 'frozen', False):
+                # If running as exe
+                os.execv(sys.executable, [sys.executable])
+            else:
+                # If running as Python script
+                os.execv(sys.executable, [sys.executable, script_path])
+                
+        except Exception as e:
+            messagebox.showerror("Restart Failed", f"Failed to restart application: {e}\n\nPlease restart manually.")
+            sys.exit(0)
+    
+    def show_changelog(self):
+        """Show changelog window"""
+        try:
+            # Try to get latest changelog from GitHub
+            response = requests.get(self.version_url, timeout=10)
+            if response.status_code == 200:
+                remote_data = response.json()
+                version_history = remote_data.get("version_history", [])
+            else:
+                # Fallback to local version file
+                with open("version.json", "r") as f:
+                    local_data = json.load(f)
+                    version_history = local_data.get("version_history", [])
+        except:
+            version_history = [{"version": self.current_version, "changelog": ["Current version"]}]
+        
+        # Create changelog window
+        changelog_window = tk.Toplevel(self.root)
+        changelog_window.title("Changelog")
+        changelog_window.geometry("600x500")
+        changelog_window.resizable(True, True)
+        
+        # Header
+        header_frame = tk.Frame(changelog_window, bg="#34495e")
+        header_frame.pack(fill="x")
+        
+        tk.Label(header_frame, text="📋 Version History", 
+                font=("Arial", 16, "bold"), fg="white", bg="#34495e").pack(pady=10)
+        
+        # Changelog content
+        text_frame = tk.Frame(changelog_window)
+        text_frame.pack(fill="both", expand=True, padx=10, pady=10)
+        
+        changelog_text = tk.Text(text_frame, wrap="word", font=("Arial", 10))
+        scrollbar = tk.Scrollbar(text_frame, command=changelog_text.yview)
+        changelog_text.config(yscrollcommand=scrollbar.set)
+        
+        changelog_text.pack(side="left", fill="both", expand=True)
+        scrollbar.pack(side="right", fill="y")
+        
+        # Add version history
+        for version_info in reversed(version_history):  # Show newest first
+            version = version_info.get("version", "Unknown")
+            release_date = version_info.get("release_date", "Unknown")
+            changes = version_info.get("changelog", [])
+            
+            changelog_text.insert("end", f"Version {version} ({release_date})\n", "version_header")
+            changelog_text.insert("end", "=" * 50 + "\n\n")
+            
+            if changes:
+                for change in changes:
+                    changelog_text.insert("end", f"• {change}\n")
+            else:
+                changelog_text.insert("end", "• No changelog available\n")
+            
+            changelog_text.insert("end", "\n\n")
+        
+        # Configure text tags
+        changelog_text.tag_config("version_header", font=("Arial", 12, "bold"), foreground="#2c3e50")
+        changelog_text.config(state="disabled")
+        
+        # Close button
+        tk.Button(changelog_window, text="Close", command=changelog_window.destroy,
+                 bg="#95a5a6", fg="white", font=("Arial", 11)).pack(pady=10)
+    
+    def show_about(self):
+        """Show about dialog"""
+        about_text = f"""RUST Battlemetrics AFK Hour Adder Tool
+Version: {self.current_version}
+
+A tool to help manage AFK time on Rust servers through Battlemetrics.
+
+Features:
+• Automated AFK farming with customizable intervals
+• Server management and validation
+• Battlemetrics integration
+• Automatic updates
+• Multiple typing modes
+• Server switching capabilities
+
+GitHub: {self.github_repo}
+
+© 2025 - Open Source Project"""
+        
+        messagebox.showinfo("About", about_text)
     
     def load_servers(self):
         """Load servers from JSON file"""
@@ -1260,6 +1594,126 @@ class RustAFKHourAdder:
         except Exception as e:
             messagebox.showerror("Error", f"Failed to open data folder: {e}")
     
+    def show_changelog(self):
+        """Show full changelog from GitHub"""
+        try:
+            self.log_status("Fetching changelog from GitHub...")
+            
+            # Fetch version info from GitHub
+            response = requests.get(self.version_url, timeout=10)
+            if response.status_code == 200:
+                version_data = response.json()
+                self.log_status(f"GitHub response keys: {list(version_data.keys())}")
+                
+                version_history = version_data.get('version_history', [])
+                
+                # If no version_history, create one from the old format
+                if not version_history:
+                    self.log_status("No version_history found, checking for old format...")
+                    
+                    # Check if it's the old format with just version and changelog
+                    if 'version' in version_data and 'changelog' in version_data:
+                        self.log_status("Found old format, converting to version history...")
+                        version_history = [{
+                            'version': version_data.get('version', 'Unknown'),
+                            'release_date': version_data.get('release_date', 'Unknown'),
+                            'changelog': version_data.get('changelog', [])
+                        }]
+                    else:
+                        messagebox.showinfo("Changelog", "No changelog data found in GitHub response.\n\nPlease upload the updated version.json with version_history to GitHub.")
+                        self.log_status("No changelog data found in GitHub response")
+                        return
+                
+                self.log_status(f"Found {len(version_history)} version(s) in changelog")
+            else:
+                messagebox.showerror("Error", f"Failed to fetch changelog from GitHub.\nStatus code: {response.status_code}")
+                self.log_status(f"Failed to fetch changelog: HTTP {response.status_code}")
+                return
+            
+            # Create changelog window (after successful data fetch)
+            changelog_window = tk.Toplevel(self.root)
+            changelog_window.title("Changelog - Version History (GitHub)")
+            changelog_window.geometry("700x600")
+            changelog_window.resizable(True, True)
+            changelog_window.minsize(500, 400)
+            
+            # Make window modal
+            changelog_window.transient(self.root)
+            changelog_window.grab_set()
+            
+            # Header
+            header_frame = tk.Frame(changelog_window)
+            header_frame.pack(fill="x", padx=20, pady=(20, 10))
+            
+            title_label = tk.Label(header_frame, text="Rust Battlemetrics AFK Tool - Changelog", 
+                                 font=("Arial", 14, "bold"))
+            title_label.pack()
+            
+            subtitle_label = tk.Label(header_frame, text=f"Current Version: {self.current_version} | Source: GitHub", 
+                                    font=("Arial", 10))
+            subtitle_label.pack(pady=(5, 0))
+            
+            # Scrollable text area
+            text_frame = tk.Frame(changelog_window)
+            text_frame.pack(fill="both", expand=True, padx=20, pady=(0, 20))
+            
+            changelog_text = tk.Text(text_frame, font=("Consolas", 10), wrap="word", 
+                                   bg="#f8f9fa", fg="#212529", padx=15, pady=15)
+            scrollbar = tk.Scrollbar(text_frame, orient="vertical", command=changelog_text.yview)
+            changelog_text.config(yscrollcommand=scrollbar.set)
+            
+            changelog_text.pack(side="left", fill="both", expand=True)
+            scrollbar.pack(side="right", fill="y")
+            
+            # Build changelog content
+            changelog_content = ""
+            for i, version_info in enumerate(version_history):
+                version = version_info.get('version', 'Unknown')
+                release_date = version_info.get('release_date', 'Unknown')
+                changes = version_info.get('changelog', [])
+                
+                # Add version header
+                if i > 0:
+                    changelog_content += "\n" + "="*60 + "\n\n"
+                
+                changelog_content += f"Version {version}\n"
+                changelog_content += f"Released: {release_date}\n"
+                changelog_content += "-" * 40 + "\n\n"
+                
+                # Add changes
+                for change in changes:
+                    changelog_content += f"• {change}\n"
+                
+                changelog_content += "\n"
+            
+            # Insert content and make read-only
+            changelog_text.insert("1.0", changelog_content)
+            changelog_text.config(state="disabled")
+            
+            # Close button
+            button_frame = tk.Frame(changelog_window)
+            button_frame.pack(pady=(0, 20))
+            
+            close_btn = tk.Button(button_frame, text="Close", command=changelog_window.destroy,
+                                bg="#6c757d", fg="white", font=("Arial", 10, "bold"),
+                                padx=20, pady=5)
+            close_btn.pack()
+            
+            # Center the window
+            changelog_window.update_idletasks()
+            x = (changelog_window.winfo_screenwidth() // 2) - (changelog_window.winfo_width() // 2)
+            y = (changelog_window.winfo_screenheight() // 2) - (changelog_window.winfo_height() // 2)
+            changelog_window.geometry(f"+{x}+{y}")
+            
+            self.log_status("Changelog displayed successfully from GitHub")
+                
+        except requests.exceptions.RequestException as e:
+            messagebox.showerror("Network Error", f"Failed to connect to GitHub:\n{e}")
+            self.log_status(f"Network error fetching changelog: {e}")
+        except Exception as e:
+            messagebox.showerror("Error", f"Error displaying changelog:\n{e}")
+            self.log_status(f"Error displaying changelog: {e}")
+
     def show_about(self):
         """Show about dialog"""
         about_text = f"""Rust Battlemetrics AFK Hour Adder Tool
@@ -2022,11 +2476,11 @@ GitHub: https://github.com/{self.github_repo}"""
         tk.Label(typing_mode_frame, text="Command typing mode:").pack(side="left")
         self.typing_mode_var = tk.StringVar(value=self.settings.get("typing_mode", "human"))
         self.typing_mode_dropdown = ttk.Combobox(typing_mode_frame, textvariable=self.typing_mode_var, 
-                                               values=["human", "bot"], width=8, state="readonly")
+                                               values=["human", "bot", "kid", "pro"], width=8, state="readonly")
         self.typing_mode_dropdown.pack(side="left", padx=10)
         self.typing_mode_dropdown.bind('<<ComboboxSelected>>', lambda e: self.on_dropdown_change("typing_mode"))
         
-        typing_note = tk.Label(system_frame, text="Global setting for ALL commands: Human = realistic typing | Bot = instant paste", 
+        typing_note = tk.Label(system_frame, text="Global setting for ALL commands: Human = realistic typing | Bot = instant paste | Kid = slow with mistakes | Pro = fast ~90 WPM", 
                               font=("Arial", 8), wraplength=350)
         typing_note.pack(anchor="w", padx=20, pady=2)
         
@@ -3965,23 +4419,166 @@ GitHub: https://github.com/{self.github_repo}"""
             return False
     
     def human_type(self, text):
-        """Type text with human-like timing"""
+        """Type text with realistic human-like timing and patterns"""
+        typing_start = datetime.now()
+        char_count = len(text)
+        
+        # Human typing characteristics
+        base_wpm = random.uniform(35, 55)  # Random typing speed between 35-55 WPM
+        base_delay = 60 / (base_wpm * 5)  # Convert WPM to seconds per character
+        
+        # Track typing rhythm - humans have bursts and slowdowns
+        rhythm_momentum = 1.0
+        last_char_time = time.time()
+        
+        for i, char in enumerate(text):
+            if not self.is_running and not self.is_adding_servers:
+                self.log_status(f"WARNING: Typing interrupted at character {i+1}/{char_count}")
+                return
+            
+            # Character-specific delays (realistic human patterns)
+            char_delay = base_delay
+            
+            # Slower on certain characters
+            if char in 'qzxQZX':  # Uncommon letters
+                char_delay *= random.uniform(1.3, 1.8)
+            elif char in '1234567890!@#$%^&*()':  # Numbers and symbols
+                char_delay *= random.uniform(1.2, 1.6)
+            elif char in ' ':  # Space - often faster
+                char_delay *= random.uniform(0.7, 1.0)
+            elif char.isupper():  # Capital letters (shift key)
+                char_delay *= random.uniform(1.1, 1.4)
+            
+            # Word boundaries - slight pause at spaces and punctuation
+            if char in ' .,;:!?':
+                char_delay *= random.uniform(1.2, 1.8)
+            
+            # Typing rhythm variations
+            current_time = time.time()
+            time_since_last = current_time - last_char_time
+            
+            # If typing too fast, slow down (fatigue)
+            if time_since_last < base_delay * 0.5:
+                rhythm_momentum *= 0.95
+            # If typing slow, speed up (getting into rhythm)
+            elif time_since_last > base_delay * 2:
+                rhythm_momentum *= 1.05
+            
+            # Keep momentum in reasonable bounds
+            rhythm_momentum = max(0.7, min(1.4, rhythm_momentum))
+            char_delay *= rhythm_momentum
+            
+            # Add natural randomness (±30%)
+            char_delay *= random.uniform(0.7, 1.3)
+            
+            # Occasional longer pauses (thinking/hesitation)
+            if random.random() < 0.08:  # 8% chance
+                thinking_pause = random.uniform(0.3, 1.2)
+                time.sleep(thinking_pause)
+            
+            # Very rare typos that get immediately corrected (2% chance)
+            if random.random() < 0.02 and char.isalpha():
+                # Type wrong character
+                nearby_keys = {
+                    'a': 'sq', 's': 'adw', 'd': 'sfre', 'f': 'dgrt', 'g': 'fhty',
+                    'h': 'gjyu', 'j': 'hkui', 'k': 'jlio', 'l': 'kop',
+                    'q': 'wa', 'w': 'qes', 'e': 'wrd', 'r': 'etf', 't': 'ryg',
+                    'y': 'tuh', 'u': 'yij', 'i': 'uok', 'o': 'ipl', 'p': 'ol',
+                    'z': 'x', 'x': 'zc', 'c': 'xv', 'v': 'cb', 'b': 'vn',
+                    'n': 'bm', 'm': 'n'
+                }
+                
+                wrong_chars = nearby_keys.get(char.lower(), 'qwerty')
+                wrong_char = random.choice(wrong_chars)
+                if char.isupper():
+                    wrong_char = wrong_char.upper()
+                
+                pyautogui.write(wrong_char)
+                time.sleep(random.uniform(0.1, 0.3))  # Brief pause before correction
+                pyautogui.press('backspace')
+                time.sleep(random.uniform(0.05, 0.15))
+            
+            # Type the actual character
+            pyautogui.write(char)
+            time.sleep(char_delay)
+            last_char_time = time.time()
+        
+        typing_duration = (datetime.now() - typing_start).total_seconds()
+        avg_char_time = typing_duration / char_count if char_count > 0 else 0
+        actual_wpm = (char_count / 5) / (typing_duration / 60) if typing_duration > 0 else 0
+        self.log_status(f"   Human typed '{text}' ({char_count} chars in {typing_duration:.2f}s, ~{actual_wpm:.0f} WPM)")
+    
+    def kid_type(self, text):
+        """Type text like a kid - slow with occasional mistakes and backspaces"""
+        typing_start = datetime.now()
+        char_count = len(text)
+        typed_chars = 0
+        mistakes_made = 0
+        
+        i = 0
+        while i < len(text):
+            if not self.is_running and not self.is_adding_servers:
+                self.log_status(f"WARNING: Typing interrupted at character {i+1}/{char_count}")
+                return
+            
+            char = text[i]
+            
+            # 15% chance of making a mistake
+            if random.random() < 0.15 and char.isalpha():
+                # Make a mistake - type a random nearby key
+                mistake_chars = 'qwertyuiopasdfghjklzxcvbnm'
+                mistake_char = random.choice(mistake_chars)
+                pyautogui.write(mistake_char)
+                typed_chars += 1
+                mistakes_made += 1
+                
+                # Pause as kid realizes mistake (0.3-0.8 seconds)
+                mistake_pause = random.uniform(0.3, 0.8)
+                time.sleep(mistake_pause)
+                
+                # Backspace to fix mistake
+                pyautogui.press('backspace')
+                time.sleep(random.uniform(0.1, 0.3))
+            
+            # Type the correct character
+            pyautogui.write(char)
+            typed_chars += 1
+            
+            # Kid typing speed: 15-25 WPM (slower than human)
+            # Average 20 WPM = 100 chars/min = 1.67 chars/sec = 0.6 sec/char
+            # Add randomness: 0.4-0.9 seconds per character
+            delay = random.uniform(0.4, 0.9)
+            time.sleep(delay)
+            
+            i += 1
+        
+        typing_duration = (datetime.now() - typing_start).total_seconds()
+        avg_char_time = typing_duration / typed_chars if typed_chars > 0 else 0
+        wpm = (typed_chars / 5) / (typing_duration / 60) if typing_duration > 0 else 0
+        self.log_status(f"   Kid typed '{text}' ({typed_chars} chars, {mistakes_made} mistakes, {typing_duration:.2f}s, ~{wpm:.0f} WPM)")
+    
+    def pro_type(self, text):
+        """Type text like a pro - fast ~90 WPM with consistent rhythm"""
         typing_start = datetime.now()
         char_count = len(text)
         
         for i, char in enumerate(text):
-            if not self.is_running:
+            if not self.is_running and not self.is_adding_servers:
                 self.log_status(f"WARNING: Typing interrupted at character {i+1}/{char_count}")
                 return
             
             pyautogui.write(char)
-            # Random delay between 0.05 and 0.15 seconds for human-like typing
-            delay = 0.05 + (time.time() % 0.1)
+            
+            # Pro typing speed: ~90 WPM
+            # 90 WPM = 450 chars/min = 7.5 chars/sec = 0.133 sec/char
+            # Add slight randomness for realism: 0.11-0.16 seconds per character
+            delay = random.uniform(0.11, 0.16)
             time.sleep(delay)
         
         typing_duration = (datetime.now() - typing_start).total_seconds()
         avg_char_time = typing_duration / char_count if char_count > 0 else 0
-        self.log_status(f"   Typed '{text}' ({char_count} chars in {typing_duration:.2f}s, avg: {avg_char_time:.3f}s/char)")
+        wpm = (char_count / 5) / (typing_duration / 60) if typing_duration > 0 else 0
+        self.log_status(f"   Pro typed '{text}' ({char_count} chars in {typing_duration:.2f}s, ~{wpm:.0f} WPM)")
     
     def type_command(self, text):
         """Type command based on global typing mode setting"""
@@ -3992,8 +4589,14 @@ GitHub: https://github.com/{self.github_repo}"""
                 # Bot mode: Instant paste
                 pyautogui.write(text)
                 self.log_status(f"   Pasted '{text}' (bot mode)")
+            elif typing_mode == "kid":
+                # Kid mode: Slow with mistakes
+                self.kid_type(text)
+            elif typing_mode == "pro":
+                # Pro mode: Fast ~90 WPM
+                self.pro_type(text)
             else:
-                # Human mode: Realistic typing
+                # Human mode: Realistic typing (default)
                 typing_start = datetime.now()
                 char_count = len(text)
                 
