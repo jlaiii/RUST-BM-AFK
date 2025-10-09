@@ -67,7 +67,7 @@ class RustAFKHourAdder:
     def __init__(self):
         # Version information
         self.current_version = "1.0.0"
-        self.github_repo = "jlaiii/RUST-BM-AFK"
+        self.github_repo = "jlaiii/BattleMetrics-Rust-Analytics"
         self.version_url = f"https://raw.githubusercontent.com/{self.github_repo}/main/version.json"
         self.script_url = f"https://raw.githubusercontent.com/{self.github_repo}/main/rust_battlemetrics_hour_adder.py"
         
@@ -593,7 +593,8 @@ Key Features:
 
 Perfect for building up your Rust profile hours!
 
-GitHub: github.com/{self.github_repo}"""
+GitHub: github.com/{self.github_repo}
+Discord: https://discord.gg/a5T2xBhKgt"""
         
         messagebox.showinfo("About RUST BM AFK Tool", about_text)
     
@@ -1701,33 +1702,7 @@ GitHub: github.com/{self.github_repo}"""
             messagebox.showerror("Error", f"Failed to open data folder: {e}")
 
 
-    def show_about(self):
-        """Show about dialog"""
-        about_text = f"""RUST BM AFK Tool v{self.current_version}
 
-What this tool does:
-• Adds hours to your Rust account automatically
-• Farms hours while you're away from computer
-• Builds legit looking gaming profiles
-• Join high hour requirement groups and servers
-• Works with any Rust server via Battlemetrics
-
-Key Features:
-• Multiple server support with auto-switching
-• Smart AFK detection avoidance
-• Automatic updates
-• Safe and undetectable operation
-• Easy setup and use
-
-Perfect for building up your Rust profile hours!
-
-GitHub: github.com/{self.github_repo}"""
-        
-        messagebox.showinfo("About RUST BM AFK Tool", about_text)
-
-    
-
-    
     def show_update_available_dialog(self, version_info):
         """Show dialog when update is available"""
         remote_version = version_info.get("version", "Unknown")
@@ -2231,10 +2206,10 @@ GitHub: github.com/{self.github_repo}"""
         
         # Add click handlers for links
         def open_github(event):
-            webbrowser.open("https://github.com/yourusername/rust-afk-hour-adder")
+            webbrowser.open(f"https://github.com/{self.github_repo}")
         
         def open_discord(event):
-            webbrowser.open("https://discord.gg/yourinvite")
+            webbrowser.open("https://discord.gg/a5T2xBhKgt")
         
         github_label.bind("<Button-1>", open_github)
         discord_label.bind("<Button-1>", open_discord)

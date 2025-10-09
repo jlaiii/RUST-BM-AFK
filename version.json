@@ -1,8 +1,8 @@
 {
   "version": "1.0.0",
   "release_date": "2025-10-09",
-  "download_url": "https://github.com/jlaiii/RUST-BM-AFK/releases/latest",
-  "github_url": "https://github.com/jlaiii/RUST-BM-AFK",
+  "download_url": "https://github.com/jlaiii/BattleMetrics-Rust-Analytics/releases/latest",
+  "github_url": "https://github.com/jlaiii/BattleMetrics-Rust-Analytics",
   "changelog": [
     "First public release"
   ],
