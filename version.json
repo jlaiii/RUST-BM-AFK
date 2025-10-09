@@ -1,17 +1,27 @@
 {
-  "version": "1.1.0",
+  "version": "1.2.0",
   "release_date": "2025-10-09",
   "download_url": "https://github.com/jlaiii/RUST-BM-AFK/releases/latest",
   "github_url": "https://github.com/jlaiii/RUST-BM-AFK",
   "changelog": [
-    "Added automatic self-update system",
-    "Update notifications with changelog preview",
-    "One-click updates with progress tracking",
-    "Automatic backup creation during updates",
-    "Enhanced version management",
-    "Improved error handling for updates"
+    "Added auto-update checkbox in Basic Settings",
+    "Users can now enable automatic updates without confirmation",
+    "Enhanced update system with better user control",
+    "Improved settings organization for update preferences",
+    "Auto-update disabled by default for safety"
   ],
   "version_history": [
+    {
+      "version": "1.2.0",
+      "release_date": "2025-10-09",
+      "changelog": [
+        "Added auto-update checkbox in Basic Settings",
+        "Users can now enable automatic updates without confirmation",
+        "Enhanced update system with better user control",
+        "Improved settings organization for update preferences",
+        "Auto-update disabled by default for safety"
+      ]
+    },
     {
       "version": "1.1.0",
       "release_date": "2025-10-09",

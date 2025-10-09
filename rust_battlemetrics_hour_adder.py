@@ -66,7 +66,7 @@ pyautogui.FAILSAFE = False
 class RustAFKHourAdder:
     def __init__(self):
         # Version information
-        self.current_version = "1.1.0"
+        self.current_version = "1.2.0"
         self.github_repo = "jlaiii/RUST-BM-AFK"
         self.version_url = f"https://raw.githubusercontent.com/{self.github_repo}/main/version.json"
         self.script_url = f"https://raw.githubusercontent.com/{self.github_repo}/main/rust_battlemetrics_hour_adder.py"
