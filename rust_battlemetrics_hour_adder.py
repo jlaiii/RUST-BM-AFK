@@ -58,14 +58,20 @@ import random
 from datetime import datetime, timedelta
 import requests
 import re
+import webbrowser
 
 # Disable pyautogui failsafe to prevent accidental mouse movement from stopping the program
 pyautogui.FAILSAFE = False
 
 class RustAFKHourAdder:
     def __init__(self):
+        # Version information
+        self.current_version = "1.0.0"
+        self.github_repo = "jlaiii/RUST-BM-AFK"
+        self.version_url = f"https://raw.githubusercontent.com/{self.github_repo}/main/version.json"
+        
         self.root = tk.Tk()
-        self.root.title("Rust Battlemetrics AFK Hour Adder Tool")
+        self.root.title(f"Rust Battlemetrics AFK Hour Adder Tool v{self.current_version}")
         self.root.geometry("900x730")  # Slightly taller to show all content
         self.root.resizable(True, True)  # Allow resizing so users can adjust if needed
         self.root.minsize(600, 400)  # Set minimum window size for usability
@@ -84,6 +90,7 @@ class RustAFKHourAdder:
             "kill_after_movement": False,  # Kill player after movement to prevent spectating
             "enable_startup_disconnect": False,  # Option to enable initial disconnect command when starting
             "disable_beep": True,  # Option to disable beep sounds
+            "auto_check_updates": True,  # Option to automatically check for updates on startup
             "minimal_activity": False,  # Option to enable minimal activity mode (19min + kill after movement)
             "auto_start_rust": True,  # Option to auto start Rust via Steam
             "rust_load_time": "1 min",  # How long to wait for Rust to load
@@ -130,30 +137,25 @@ class RustAFKHourAdder:
         
         self.load_settings()
         self.create_gui()
+        
+        # Check for updates in background if enabled
+        if self.settings.get("auto_check_updates", True):
+            self.root.after(2000, self.background_update_check)  # Check after 2 seconds
+        
+        # Check if we should start farming at boot
+        if self.settings.get("start_at_boot", False):
+            self.root.after(1000, self.handle_startup_farming)  # Check after 1 second
     
     def create_menu_bar(self):
         """Create the application menu bar"""
         menubar = tk.Menu(self.root)
         self.root.config(menu=menubar)
         
-        # Servers menu
-        servers_menu = tk.Menu(menubar, tearoff=0)
-        menubar.add_cascade(label="Servers", menu=servers_menu)
-        servers_menu.add_command(label="Validate Servers", command=self.validate_servers)
-        servers_menu.add_command(label="Update Server Info", command=lambda: self.validate_servers())
-        servers_menu.add_separator()
-        servers_menu.add_command(label="Import from File...", command=self.import_servers_from_file)
-        servers_menu.add_command(label="Export to File...", command=self.export_servers_to_file)
-        
-        # Tools menu
-        tools_menu = tk.Menu(menubar, tearoff=0)
-        menubar.add_cascade(label="Tools", menu=tools_menu)
-        tools_menu.add_command(label="Clear Log", command=self.clear_log)
-        tools_menu.add_command(label="Open Data Folder", command=self.open_data_folder)
-        
         # Help menu
         help_menu = tk.Menu(menubar, tearoff=0)
         menubar.add_cascade(label="Help", menu=help_menu)
+        help_menu.add_command(label="Check for Updates", command=self.check_for_updates)
+        help_menu.add_separator()
         help_menu.add_command(label="About", command=self.show_about)
     
     def load_servers(self):
@@ -195,7 +197,7 @@ class RustAFKHourAdder:
             self.log_status(f"Error saving servers: {e}")
     
     def ping_server(self, server_ip, timeout=5):
-        """Check if a Rust server is online using multiple methods"""
+        """Check if a server host is reachable (NOT if Rust server is actually running)"""
         try:
             # Parse IP and port
             if ':' in server_ip:
@@ -258,28 +260,44 @@ class RustAFKHourAdder:
             print(f"Error in ping_server for {server_ip}: {e}")
             return False
     
-    def check_server_battlemetrics(self, server_ip, timeout=10, server_name=None):
-        """Check server status using Battlemetrics API (more accurate but slower)"""
+    def check_server_battlemetrics(self, server_ip, timeout=10, server_name=None, max_retries=2):
+        """Check server status using Battlemetrics API - definitive validation"""
+        rate_limited = False
         try:
             # Use the enhanced search from get_server_info_battlemetrics
-            server_info = self.get_server_info_battlemetrics(server_ip, timeout, server_name=server_name)
+            server_info, was_rate_limited = self.get_server_info_battlemetrics(server_ip, timeout, server_name=server_name, max_retries=max_retries)
+            rate_limited = was_rate_limited
             
             if server_info:
                 # Found server on BattleMetrics, check status
                 status = server_info.get('status')
-                return status == 'online'
+                result = status == 'online'
             else:
-                # Server not found on Battlemetrics, fallback to ping
-                self.log_status(f"Server {server_ip} not found on BattleMetrics, using ping fallback")
-                return self.ping_server(server_ip, timeout)
+                # Server not found on BattleMetrics = server is not valid/online
+                if not hasattr(self, '_bulk_validation_mode') or not self._bulk_validation_mode:
+                    self.log_status(f"Server {server_ip} not found on BattleMetrics - marking as offline")
+                result = False
+            
+            # Store rate limiting info for adaptive system
+            if hasattr(self, '_current_server_data'):
+                self._current_server_data['_rate_limited'] = rate_limited
+                
+            return result
                 
         except Exception as e:
-            # API method failed, fallback to ping
-            self.log_status(f"BattleMetrics check failed for {server_ip}: {e}, using ping fallback")
-            return self.ping_server(server_ip, timeout)
+            # API method failed = cannot verify server status
+            if not hasattr(self, '_bulk_validation_mode') or not self._bulk_validation_mode:
+                self.log_status(f"BattleMetrics check failed for {server_ip}: {e} - marking as offline")
+            
+            # Store rate limiting info for adaptive system
+            if hasattr(self, '_current_server_data'):
+                self._current_server_data['_rate_limited'] = rate_limited
+                
+            return False
     
-    def get_server_info_battlemetrics(self, server_ip, timeout=10, server_name=None):
-        """Get detailed server information from Battlemetrics API"""
+    def get_server_info_battlemetrics(self, server_ip, timeout=10, server_name=None, max_retries=2):
+        """Get detailed server information from Battlemetrics API with retry logic"""
+        was_rate_limited = False
         try:
             # Parse IP and port
             if ':' in server_ip:
@@ -366,21 +384,55 @@ class RustAFKHourAdder:
                     search_attempts.append(('server_name_part', word))
             
             for search_type, search_term in search_attempts:
-                self.log_status(f"Searching BattleMetrics for {search_term} (method: {search_type})")
+                # Only log search attempts if not in bulk validation mode
+                if not hasattr(self, '_bulk_validation_mode') or not self._bulk_validation_mode:
+                    self.log_status(f"Searching BattleMetrics for {search_term} (method: {search_type})")
                 
-                search_url = f"https://api.battlemetrics.com/servers"
-                params = {
-                    'filter[game]': 'rust',
-                    'filter[search]': search_term,
-                    'page[size]': 50  # Increased to get more results
-                }
+                # Retry logic for each search attempt
+                for retry_count in range(max_retries + 1):
+                    try:
+                        search_url = f"https://api.battlemetrics.com/servers"
+                        params = {
+                            'filter[game]': 'rust',
+                            'filter[search]': search_term,
+                            'page[size]': 50  # Increased to get more results
+                        }
+                        
+                        response = requests.get(search_url, params=params, timeout=timeout)
+                        
+                        # Handle rate limiting with exponential backoff
+                        if response.status_code == 429:
+                            was_rate_limited = True
+                            if retry_count < max_retries:
+                                wait_time = 30 * (2 ** retry_count)  # 30s, 60s exponential backoff
+                                if not hasattr(self, '_bulk_validation_mode') or not self._bulk_validation_mode:
+                                    self.log_status(f"Rate limited - retry {retry_count + 1}/{max_retries + 1} in {wait_time}s...")
+                                time.sleep(wait_time)
+                                continue
+                            else:
+                                # Max retries reached, skip this search
+                                if not hasattr(self, '_bulk_validation_mode') or not self._bulk_validation_mode:
+                                    self.log_status(f"Rate limited - max retries reached for {search_term}")
+                                break
+                        
+                        # Success - break out of retry loop
+                        break
+                        
+                    except requests.exceptions.RequestException as e:
+                        if retry_count < max_retries:
+                            wait_time = 10 * (retry_count + 1)  # 10s, 20s for network errors
+                            if not hasattr(self, '_bulk_validation_mode') or not self._bulk_validation_mode:
+                                self.log_status(f"Network error - retry {retry_count + 1}/{max_retries + 1} in {wait_time}s: {e}")
+                            time.sleep(wait_time)
+                            continue
+                        else:
+                            # Max retries reached
+                            if not hasattr(self, '_bulk_validation_mode') or not self._bulk_validation_mode:
+                                self.log_status(f"Network error - max retries reached: {e}")
+                            break
                 
-                response = requests.get(search_url, params=params, timeout=timeout)
-                
-                # Handle rate limiting
-                if response.status_code == 429:
-                    self.log_status("Rate limited by BattleMetrics API, waiting...")
-                    time.sleep(2)
+                # Skip processing if we couldn't get a successful response
+                if 'response' not in locals() or response.status_code != 200:
                     continue
                 
                 if response.status_code == 200:
@@ -399,7 +451,7 @@ class RustAFKHourAdder:
                         if ((server_ip_attr == resolved_ip or server_ip_attr == original_ip) 
                             and server_port_attr == port):
                             self.log_status(f"Found exact IP:port match: {server_ip_attr}:{server_port_attr}")
-                            return extract_server_info(server)
+                            return extract_server_info(server), was_rate_limited
                     
                     # Strategy 2: If searching by domain part, look for name matches
                     if search_type == 'domain_part' and is_domain:
@@ -413,7 +465,7 @@ class RustAFKHourAdder:
                             if (server_port_attr == port and 
                                 any(part in server_name for part in domain_parts if len(part) > 3)):
                                 self.log_status(f"Found name match: {server_name} (port: {server_port_attr})")
-                                return extract_server_info(server)
+                                return extract_server_info(server), was_rate_limited
                     
                     # Strategy 3: If searching by server name part, look for name and port matches
                     if search_type == 'server_name_part':
@@ -425,7 +477,7 @@ class RustAFKHourAdder:
                             # Check if server name contains the search term and port matches
                             if server_port_attr == port and search_term in server_name:
                                 self.log_status(f"Found server name match: {server_name} (port: {server_port_attr})")
-                                return extract_server_info(server)
+                                return extract_server_info(server), was_rate_limited
                     
                     # Strategy 4: Port-only match as last resort (for name-based searches)
                     if search_type in ['domain_part', 'server_name_part'] and len(servers) > 0:
@@ -435,18 +487,20 @@ class RustAFKHourAdder:
                             
                             if server_port_attr == port:
                                 self.log_status(f"Found port match as fallback: {attributes.get('name', 'Unknown')} (port: {server_port_attr})")
-                                return extract_server_info(server)
+                                return extract_server_info(server), was_rate_limited
                 
                 # Small delay between search attempts to be nice to the API
-                time.sleep(1)
+                time.sleep(0.1)  # 0.1 second delay between search attempts
             
-            # If all search attempts failed
-            self.log_status(f"Could not find server {server_ip} on BattleMetrics after trying multiple search methods")
-            return None
+            # If all search attempts failed - reduce log verbosity
+            # Only log if this is a manual validation, not during bulk operations
+            if not hasattr(self, '_bulk_validation_mode') or not self._bulk_validation_mode:
+                self.log_status(f"Could not find server {server_ip} on BattleMetrics after trying multiple search methods")
+            return None, was_rate_limited
                 
         except Exception as e:
             self.log_status(f"Error searching BattleMetrics for {server_ip}: {e}")
-            return None
+            return None, was_rate_limited
     
     def validate_servers(self):
         """Validate all servers and show results"""
@@ -465,10 +519,10 @@ class RustAFKHourAdder:
         method_frame = tk.LabelFrame(validation_window, text="Validation Method", padx=10, pady=5)
         method_frame.pack(fill="x", padx=10, pady=(10, 5))
         
-        validation_method = tk.StringVar(value="ping")
-        tk.Radiobutton(method_frame, text="Quick Ping (Fast, less accurate)", 
+        validation_method = tk.StringVar(value="battlemetrics")
+        tk.Radiobutton(method_frame, text="Quick Ping (Fast, but unreliable - only checks host reachability)", 
                       variable=validation_method, value="ping").pack(anchor="w", pady=2)
-        tk.Radiobutton(method_frame, text="Battlemetrics API (Slower, more accurate)", 
+        tk.Radiobutton(method_frame, text="BattleMetrics API (Recommended - verifies actual server status)", 
                       variable=validation_method, value="battlemetrics").pack(anchor="w", pady=2)
         
         # Progress frame
@@ -884,6 +938,9 @@ class RustAFKHourAdder:
                 online_servers = []
                 offline_servers = []
                 
+                # Set bulk validation mode to reduce logging verbosity
+                self._bulk_validation_mode = True
+                
                 def validate_single_server(i, server):
                     nonlocal completed_servers
                     
@@ -899,9 +956,15 @@ class RustAFKHourAdder:
                     
                     # Choose validation method
                     if method == "battlemetrics":
-                        is_online = self.check_server_battlemetrics(server_ip, timeout=10, server_name=server_name)
+                        is_online = self.check_server_battlemetrics(server_ip, timeout=15, server_name=server_name, max_retries=2)
+                        # Mark validation method used
+                        server['_validation_method'] = 'battlemetrics'
+                        server['_battlemetrics_found'] = is_online
                     else:
+                        # Ping only checks if host is reachable, not if Rust server is actually running
                         is_online = self.ping_server(server_ip)
+                        server['_validation_method'] = 'ping'
+                        server['_battlemetrics_found'] = False
                     
                     # Check again if stop was requested during validation
                     if validation_stop_requested:
@@ -937,6 +1000,8 @@ class RustAFKHourAdder:
                     completed_servers += 1
                     validation_window.after(0, lambda: progress_var.set(completed_servers))
                     
+                    # No delays here - handled by smart adaptive system
+                    
                     return is_online, i, server
                 
                 # Add header
@@ -945,30 +1010,170 @@ class RustAFKHourAdder:
                 validation_window.after(0, lambda: results_text.insert(tk.END, "STATUS   | SERVER NAME                              | IP ADDRESS\n"))
                 validation_window.after(0, lambda: results_text.insert(tk.END, "-" * 80 + "\n"))
                 
-                # Use ThreadPoolExecutor for concurrent validation
-                max_workers = 5 if method == "battlemetrics" else 10  # Fewer concurrent requests for API
-                with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
-                    futures = [executor.submit(validate_single_server, i, server) for i, server in enumerate(self.servers)]
+                # Process servers based on validation method
+                if method == "battlemetrics":
+                    # Smart adaptive processing for BattleMetrics
+                    api_performance = {
+                        'success_count': 0,
+                        'rate_limit_count': 0,
+                        'error_count': 0,
+                        'avg_response_time': 0,
+                        'total_requests': 0,
+                        'current_delay': 3.0,  # Start with 3 second delay
+                        'batch_size': 1,  # Start with sequential
+                        'consecutive_successes': 0
+                    }
                     
-                    for future in concurrent.futures.as_completed(futures):
-                        try:
-                            result = future.result()
-                            # If validation was stopped, break early
+                    def update_api_performance(success, rate_limited, response_time, error=False):
+                        api_performance['total_requests'] += 1
+                        if success:
+                            api_performance['success_count'] += 1
+                            api_performance['consecutive_successes'] += 1
+                        else:
+                            api_performance['consecutive_successes'] = 0
+                            
+                        if rate_limited:
+                            api_performance['rate_limit_count'] += 1
+                        if error:
+                            api_performance['error_count'] += 1
+                            
+                        # Update average response time
+                        if response_time > 0:
+                            if api_performance['avg_response_time'] == 0:
+                                api_performance['avg_response_time'] = response_time
+                            else:
+                                api_performance['avg_response_time'] = (api_performance['avg_response_time'] + response_time) / 2
+                        
+                        # Adaptive delay adjustment
+                        success_rate = api_performance['success_count'] / api_performance['total_requests']
+                        rate_limit_rate = api_performance['rate_limit_count'] / api_performance['total_requests']
+                        
+                        # Adjust delay based on performance
+                        if rate_limit_rate > 0.2:  # More than 20% rate limited
+                            api_performance['current_delay'] = min(api_performance['current_delay'] * 1.5, 10.0)
+                        elif success_rate > 0.8 and api_performance['consecutive_successes'] >= 5:
+                            # API is performing well, speed up
+                            api_performance['current_delay'] = max(api_performance['current_delay'] * 0.8, 0.5)
+                            
+                        # Adjust batch size based on performance
+                        if success_rate > 0.9 and rate_limit_rate < 0.1 and api_performance['consecutive_successes'] >= 10:
+                            api_performance['batch_size'] = min(3, api_performance['batch_size'] + 1)
+                        elif rate_limit_rate > 0.15 or api_performance['consecutive_successes'] < 3:
+                            api_performance['batch_size'] = 1
+                    
+                    # Process servers with adaptive batching
+                    i = 0
+                    while i < len(self.servers) and not validation_stop_requested:
+                        batch_end = min(i + api_performance['batch_size'], len(self.servers))
+                        batch_servers = [(idx, self.servers[idx]) for idx in range(i, batch_end)]
+                        
+                        if api_performance['batch_size'] == 1:
+                            # Sequential processing
+                            for server_idx, server in batch_servers:
+                                if validation_stop_requested:
+                                    break
+                                start_time = time.time()
+                                try:
+                                    result = validate_single_server(server_idx, server)
+                                    response_time = time.time() - start_time
+                                    
+                                    if result:
+                                        is_online, server_index, server_data = result
+                                        rate_limited = hasattr(server_data, '_rate_limited') and server_data._rate_limited
+                                        update_api_performance(True, rate_limited, response_time)
+                                        
+                                        if is_online:
+                                            online_servers.append((server_index, server_data))
+                                        else:
+                                            offline_servers.append((server_index, server_data))
+                                    else:
+                                        update_api_performance(False, False, response_time, error=True)
+                                        offline_servers.append((server_idx, server))
+                                        
+                                except Exception as e:
+                                    response_time = time.time() - start_time
+                                    update_api_performance(False, False, response_time, error=True)
+                                    error_msg = f"Error validating server: {e}"
+                                    print(error_msg)
+                                    offline_servers.append((server_idx, server))
+                                
+                                # Adaptive delay
+                                if server_idx < len(self.servers) - 1:  # Not the last server
+                                    time.sleep(api_performance['current_delay'])
+                        else:
+                            # Batch processing with ThreadPoolExecutor
+                            with concurrent.futures.ThreadPoolExecutor(max_workers=api_performance['batch_size']) as executor:
+                                batch_futures = [executor.submit(validate_single_server, idx, server) for idx, server in batch_servers]
+                                
+                                for future in concurrent.futures.as_completed(batch_futures):
+                                    if validation_stop_requested:
+                                        for f in batch_futures:
+                                            f.cancel()
+                                        break
+                                    try:
+                                        result = future.result()
+                                        if result:
+                                            is_online, server_index, server_data = result
+                                            rate_limited = hasattr(server_data, '_rate_limited') and server_data._rate_limited
+                                            update_api_performance(True, rate_limited, 0)
+                                            
+                                            if is_online:
+                                                online_servers.append((server_index, server_data))
+                                            else:
+                                                offline_servers.append((server_index, server_data))
+                                        else:
+                                            update_api_performance(False, False, 0, error=True)
+                                    except Exception as e:
+                                        update_api_performance(False, False, 0, error=True)
+                                        error_msg = f"Error validating server: {e}"
+                                        print(error_msg)
+                            
+                            # Delay between batches
+                            if batch_end < len(self.servers):
+                                time.sleep(api_performance['current_delay'])
+                        
+                        i = batch_end
+                        
+                        # Log performance every 10 servers
+                        if i % 10 == 0 and not hasattr(self, '_bulk_validation_mode'):
+                            success_rate = api_performance['success_count'] / max(api_performance['total_requests'], 1) * 100
+                            self.log_status(f"API Performance: {success_rate:.1f}% success, delay: {api_performance['current_delay']:.1f}s, batch: {api_performance['batch_size']}")
+                    
+                    # Final performance summary
+                    if not hasattr(self, '_bulk_validation_mode'):
+                        success_rate = api_performance['success_count'] / max(api_performance['total_requests'], 1) * 100
+                        rate_limit_rate = api_performance['rate_limit_count'] / max(api_performance['total_requests'], 1) * 100
+                        self.log_status(f"Final API Performance: {success_rate:.1f}% success, {rate_limit_rate:.1f}% rate limited, avg delay: {api_performance['current_delay']:.1f}s")
+                else:
+                    # Use ThreadPoolExecutor for ping validation (lighter load)
+                    max_workers = 10
+                    with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
+                        futures = [executor.submit(validate_single_server, i, server) for i, server in enumerate(self.servers)]
+                        
+                        for future in concurrent.futures.as_completed(futures):
                             if validation_stop_requested:
                                 # Cancel remaining futures
                                 for f in futures:
                                     f.cancel()
                                 break
-                        except Exception as e:
-                            error_msg = f"Error validating server: {e}"
-                            print(error_msg)
-                            # Try to log to file if possible
                             try:
-                                with open(os.path.join("data", "afk_log.txt"), "a", encoding="utf-8") as f:
-                                    timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-                                    f.write(f"[{timestamp}] {error_msg}\n")
-                            except:
-                                pass
+                                result = future.result()
+                                if result:
+                                    is_online, server_index, server_data = result
+                                    if is_online:
+                                        online_servers.append((server_index, server_data))
+                                    else:
+                                        offline_servers.append((server_index, server_data))
+                            except Exception as e:
+                                error_msg = f"Error validating server: {e}"
+                                print(error_msg)
+                                # Try to log to file if possible
+                                try:
+                                    with open(os.path.join("data", "afk_log.txt"), "a", encoding="utf-8") as f:
+                                        timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                                        f.write(f"[{timestamp}] {error_msg}\n")
+                                except:
+                                    pass
                 
                 # Calculate final timing
                 total_elapsed = time.time() - validation_start_time
@@ -990,6 +1195,21 @@ class RustAFKHourAdder:
                 
                 validation_window.after(0, lambda: start_btn.config(state="normal", text="Start Validation"))
                 validation_window.after(0, lambda: stop_btn.config(state="disabled", text="Stop"))
+                
+                # Reset bulk validation mode and log summary
+                self._bulk_validation_mode = False
+                
+                # Log validation summary
+                battlemetrics_online = sum(1 for _, server in online_servers if server.get('_validation_method') == 'battlemetrics')
+                ping_online = sum(1 for _, server in online_servers if server.get('_validation_method') == 'ping')
+                
+                self.log_status(f"Validation complete: {online_count} online, {offline_count} offline")
+                if battlemetrics_online > 0:
+                    self.log_status(f"  - {battlemetrics_online} verified on BattleMetrics (reliable)")
+                if ping_online > 0:
+                    self.log_status(f"  - {ping_online} ping-responsive only (may not be actual Rust servers)")
+                if offline_count > 0:
+                    self.log_status(f"  - {offline_count} failed validation (offline or not found)")
                 
                 # Enable remove button if there are offline servers
                 if offline_count > 0:
@@ -1108,9 +1328,9 @@ class RustAFKHourAdder:
     
     def show_about(self):
         """Show about dialog"""
-        about_text = """Rust Battlemetrics AFK Hour Adder Tool
+        about_text = f"""Rust Battlemetrics AFK Hour Adder Tool
         
-Version: 2.0 Enhanced
+Version: {self.current_version}
         
 Features:
 • AFK hour farming with multiple servers
@@ -1118,11 +1338,393 @@ Features:
 • Server validation and info updates
 • Import/Export server lists
 • Real-time progress tracking
+• Automatic update checking
 
 Created for Rust server hour farming
-Enhanced with BattleMetrics API integration"""
+Enhanced with BattleMetrics API integration
+
+GitHub: https://github.com/{self.github_repo}"""
         
         messagebox.showinfo("About", about_text)
+    
+    def check_for_updates(self):
+        """Check for updates from GitHub"""
+        try:
+            self.log_status("Checking for updates...")
+            
+            # Fetch version info from GitHub
+            response = requests.get(self.version_url, timeout=10)
+            if response.status_code == 200:
+                remote_version_info = response.json()
+                remote_version = remote_version_info.get("version", "0.0.0")
+                
+                # Compare versions
+                if self.is_newer_version(remote_version, self.current_version):
+                    self.show_update_available_dialog(remote_version_info)
+                else:
+                    messagebox.showinfo("No Updates", 
+                                      f"You are running the latest version ({self.current_version})")
+                    self.log_status("No updates available - you have the latest version")
+            else:
+                messagebox.showerror("Update Check Failed", 
+                                   f"Failed to check for updates. HTTP {response.status_code}")
+                self.log_status(f"Update check failed: HTTP {response.status_code}")
+                
+        except requests.exceptions.RequestException as e:
+            messagebox.showerror("Update Check Failed", 
+                               f"Failed to connect to GitHub:\n{str(e)}")
+            self.log_status(f"Update check failed: {str(e)}")
+        except Exception as e:
+            messagebox.showerror("Update Check Failed", 
+                               f"An error occurred while checking for updates:\n{str(e)}")
+            self.log_status(f"Update check error: {str(e)}")
+    
+    def is_newer_version(self, remote_version, current_version):
+        """Compare version strings to determine if remote is newer"""
+        try:
+            # Split versions into parts and compare
+            remote_parts = [int(x) for x in remote_version.split('.')]
+            current_parts = [int(x) for x in current_version.split('.')]
+            
+            # Pad shorter version with zeros
+            max_len = max(len(remote_parts), len(current_parts))
+            remote_parts.extend([0] * (max_len - len(remote_parts)))
+            current_parts.extend([0] * (max_len - len(current_parts)))
+            
+            # Compare each part
+            for remote_part, current_part in zip(remote_parts, current_parts):
+                if remote_part > current_part:
+                    return True
+                elif remote_part < current_part:
+                    return False
+            
+            return False  # Versions are equal
+        except Exception:
+            return False  # If comparison fails, assume no update needed
+    
+    def show_update_available_dialog(self, version_info):
+        """Show dialog when update is available"""
+        remote_version = version_info.get("version", "Unknown")
+        release_date = version_info.get("release_date", "Unknown")
+        changelog = version_info.get("changelog", [])
+        download_url = version_info.get("download_url", f"https://github.com/{self.github_repo}/releases/latest")
+        
+        # Create update dialog
+        update_window = tk.Toplevel(self.root)
+        update_window.title("Update Available")
+        update_window.geometry("500x400")
+        update_window.resizable(False, False)
+        update_window.grab_set()  # Make it modal
+        
+        # Center the window
+        update_window.transient(self.root)
+        update_window.geometry("+%d+%d" % (
+            self.root.winfo_rootx() + 200,
+            self.root.winfo_rooty() + 100
+        ))
+        
+        # Header
+        header_frame = tk.Frame(update_window, bg="#4CAF50")
+        header_frame.pack(fill="x", pady=(0, 20))
+        
+        tk.Label(header_frame, text="🎉 Update Available!", 
+                font=("Arial", 16, "bold"), bg="#4CAF50", fg="white").pack(pady=15)
+        
+        # Content frame
+        content_frame = tk.Frame(update_window)
+        content_frame.pack(fill="both", expand=True, padx=20)
+        
+        # Version info
+        version_frame = tk.Frame(content_frame)
+        version_frame.pack(fill="x", pady=(0, 15))
+        
+        tk.Label(version_frame, text=f"Current Version: {self.current_version}", 
+                font=("Arial", 11)).pack(anchor="w")
+        tk.Label(version_frame, text=f"New Version: {remote_version}", 
+                font=("Arial", 11, "bold"), fg="#4CAF50").pack(anchor="w")
+        tk.Label(version_frame, text=f"Release Date: {release_date}", 
+                font=("Arial", 10), fg="gray").pack(anchor="w")
+        
+        # Changelog
+        if changelog:
+            tk.Label(content_frame, text="What's New:", 
+                    font=("Arial", 11, "bold")).pack(anchor="w", pady=(10, 5))
+            
+            changelog_frame = tk.Frame(content_frame)
+            changelog_frame.pack(fill="both", expand=True)
+            
+            changelog_text = tk.Text(changelog_frame, height=8, wrap="word", 
+                                   font=("Arial", 10), bg="#f5f5f5")
+            scrollbar = tk.Scrollbar(changelog_frame, orient="vertical", command=changelog_text.yview)
+            changelog_text.config(yscrollcommand=scrollbar.set)
+            
+            changelog_text.pack(side="left", fill="both", expand=True)
+            scrollbar.pack(side="right", fill="y")
+            
+            # Add changelog items
+            for i, item in enumerate(changelog, 1):
+                changelog_text.insert("end", f"• {item}\n")
+            
+            changelog_text.config(state="disabled")
+        
+        # Buttons
+        button_frame = tk.Frame(update_window)
+        button_frame.pack(fill="x", padx=20, pady=20)
+        
+        tk.Button(button_frame, text="Download Update", 
+                 command=lambda: self.open_download_page(download_url, update_window),
+                 bg="#4CAF50", fg="white", font=("Arial", 11, "bold"),
+                 width=15).pack(side="right", padx=(10, 0))
+        
+        tk.Button(button_frame, text="Later", 
+                 command=update_window.destroy,
+                 bg="#gray", fg="white", font=("Arial", 11),
+                 width=10).pack(side="right")
+        
+        self.log_status(f"Update available: v{remote_version} (current: v{self.current_version})")
+    
+    def open_download_page(self, download_url, dialog_window):
+        """Open the download page in browser"""
+        try:
+            webbrowser.open(download_url)
+            dialog_window.destroy()
+            self.log_status("Opened download page in browser")
+        except Exception as e:
+            messagebox.showerror("Error", f"Failed to open download page:\n{str(e)}")
+            self.log_status(f"Failed to open download page: {str(e)}")
+    
+    def background_update_check(self):
+        """Check for updates in background without blocking UI"""
+        def check_updates_thread():
+            try:
+                response = requests.get(self.version_url, timeout=10)
+                if response.status_code == 200:
+                    remote_version_info = response.json()
+                    remote_version = remote_version_info.get("version", "0.0.0")
+                    
+                    if self.is_newer_version(remote_version, self.current_version):
+                        # Schedule the update dialog to show on main thread
+                        self.root.after(0, lambda: self.show_background_update_dialog(remote_version_info))
+                    else:
+                        self.log_status("Background update check: No updates available")
+                else:
+                    self.log_status(f"Background update check failed: HTTP {response.status_code}")
+            except Exception as e:
+                self.log_status(f"Background update check failed: {str(e)}")
+        
+        # Run update check in background thread
+        threading.Thread(target=check_updates_thread, daemon=True).start()
+    
+    def show_background_update_dialog(self, version_info):
+        """Show update dialog for background checks with 'Don't ask again' option"""
+        remote_version = version_info.get("version", "Unknown")
+        release_date = version_info.get("release_date", "Unknown")
+        changelog = version_info.get("changelog", [])
+        download_url = version_info.get("download_url", f"https://github.com/{self.github_repo}/releases/latest")
+        
+        # Create update dialog
+        update_window = tk.Toplevel(self.root)
+        update_window.title("Update Available")
+        update_window.geometry("520x450")
+        update_window.resizable(False, False)
+        update_window.grab_set()  # Make it modal
+        
+        # Center the window
+        update_window.transient(self.root)
+        update_window.geometry("+%d+%d" % (
+            self.root.winfo_rootx() + 190,
+            self.root.winfo_rooty() + 90
+        ))
+        
+        # Header
+        header_frame = tk.Frame(update_window, bg="#4CAF50")
+        header_frame.pack(fill="x", pady=(0, 20))
+        
+        tk.Label(header_frame, text="🎉 Update Available!", 
+                font=("Arial", 16, "bold"), bg="#4CAF50", fg="white").pack(pady=15)
+        
+        # Content frame
+        content_frame = tk.Frame(update_window)
+        content_frame.pack(fill="both", expand=True, padx=20)
+        
+        # Version info
+        version_frame = tk.Frame(content_frame)
+        version_frame.pack(fill="x", pady=(0, 15))
+        
+        tk.Label(version_frame, text=f"Current Version: {self.current_version}", 
+                font=("Arial", 11)).pack(anchor="w")
+        tk.Label(version_frame, text=f"New Version: {remote_version}", 
+                font=("Arial", 11, "bold"), fg="#4CAF50").pack(anchor="w")
+        tk.Label(version_frame, text=f"Release Date: {release_date}", 
+                font=("Arial", 10), fg="gray").pack(anchor="w")
+        
+        # Changelog
+        if changelog:
+            tk.Label(content_frame, text="What's New:", 
+                    font=("Arial", 11, "bold")).pack(anchor="w", pady=(10, 5))
+            
+            changelog_frame = tk.Frame(content_frame)
+            changelog_frame.pack(fill="both", expand=True)
+            
+            changelog_text = tk.Text(changelog_frame, height=8, wrap="word", 
+                                   font=("Arial", 10), bg="#f5f5f5")
+            scrollbar = tk.Scrollbar(changelog_frame, orient="vertical", command=changelog_text.yview)
+            changelog_text.config(yscrollcommand=scrollbar.set)
+            
+            changelog_text.pack(side="left", fill="both", expand=True)
+            scrollbar.pack(side="right", fill="y")
+            
+            # Add changelog items
+            for i, item in enumerate(changelog, 1):
+                changelog_text.insert("end", f"• {item}\n")
+            
+            changelog_text.config(state="disabled")
+        
+        # Don't ask again checkbox
+        dont_ask_frame = tk.Frame(update_window)
+        dont_ask_frame.pack(fill="x", padx=20, pady=(10, 0))
+        
+        dont_ask_var = tk.BooleanVar()
+        tk.Checkbutton(dont_ask_frame, text="Don't check for updates automatically", 
+                      variable=dont_ask_var, font=("Arial", 9)).pack(anchor="w")
+        
+        # Buttons
+        button_frame = tk.Frame(update_window)
+        button_frame.pack(fill="x", padx=20, pady=20)
+        
+        def on_download():
+            if dont_ask_var.get():
+                self.settings["auto_check_updates"] = False
+                self.auto_check_updates_var.set(False)
+                self.save_settings()
+                self.log_status("Automatic update checking disabled by user")
+            self.open_download_page(download_url, update_window)
+        
+        def on_later():
+            if dont_ask_var.get():
+                self.settings["auto_check_updates"] = False
+                self.auto_check_updates_var.set(False)
+                self.save_settings()
+                self.log_status("Automatic update checking disabled by user")
+            update_window.destroy()
+        
+        tk.Button(button_frame, text="Download Update", 
+                 command=on_download,
+                 bg="#4CAF50", fg="white", font=("Arial", 11, "bold"),
+                 width=15).pack(side="right", padx=(10, 0))
+        
+        tk.Button(button_frame, text="Later", 
+                 command=on_later,
+                 bg="#gray", fg="white", font=("Arial", 11),
+                 width=10).pack(side="right")
+        
+        self.log_status(f"Background update check: v{remote_version} available (current: v{self.current_version})")
+    
+    def handle_startup_farming(self):
+        """Handle automatic startup farming if enabled"""
+        try:
+            if not self.settings.get("start_at_boot", False):
+                return
+            
+            # Parse boot wait time
+            boot_wait_str = self.settings.get("boot_wait_time", "4 min")
+            if "sec" in boot_wait_str:  # Handle seconds for testing
+                wait_seconds = int(boot_wait_str.split()[0])
+            else:  # Handle minutes
+                wait_minutes = int(boot_wait_str.split()[0])
+                wait_seconds = wait_minutes * 60
+            
+            self.log_status(f"Windows startup detected - will start farming in {boot_wait_str}")
+            self.log_status("You can cancel this by clicking 'Stop Hour Farming' before the timer expires")
+            
+            # Initialize startup progress tracking
+            self.startup_total_seconds = wait_seconds
+            self.startup_remaining_seconds = wait_seconds
+            self.startup_in_progress = True
+            
+            # Enable the stop button so user can cancel startup
+            self.stop_button.config(state="normal")
+            
+            # Update the status label and start countdown
+            self.update_startup_progress()
+            
+        except Exception as e:
+            self.log_status(f"Error in startup farming handler: {e}")
+    
+    def update_startup_progress(self):
+        """Update the startup progress display"""
+        try:
+            if not hasattr(self, 'startup_in_progress') or not self.startup_in_progress:
+                return
+            
+            # Calculate progress percentage
+            elapsed_seconds = self.startup_total_seconds - self.startup_remaining_seconds
+            progress_percent = (elapsed_seconds / self.startup_total_seconds) * 100
+            
+            # Format time remaining
+            minutes = self.startup_remaining_seconds // 60
+            seconds = self.startup_remaining_seconds % 60
+            time_str = f"{minutes:02d}:{seconds:02d}"
+            
+            # Update status label with progress
+            status_text = f"Auto-start in {time_str} ({progress_percent:.0f}%) - Click 'Stop Hour Farming' to cancel"
+            self.status_label.config(text=status_text, fg="orange")
+            
+            # Check if countdown is complete
+            if self.startup_remaining_seconds <= 0:
+                self.startup_in_progress = False
+                # The stop button will be managed by start_afk() when farming actually begins
+                self.auto_start_farming()
+                return
+            
+            # Decrement counter and schedule next update
+            self.startup_remaining_seconds -= 1
+            self.root.after(1000, self.update_startup_progress)  # Update every second
+            
+        except Exception as e:
+            self.log_status(f"Error in startup progress update: {e}")
+            self.startup_in_progress = False
+    
+    def auto_start_farming(self):
+        """Automatically start farming (called after boot wait time)"""
+        try:
+            # Reset startup progress tracking
+            self.startup_in_progress = False
+            
+            # Check if user hasn't manually started already or cancelled
+            if self.is_running:
+                self.log_status("Farming already running - skipping auto-start")
+                self.status_label.config(text="Already running", fg="green")
+                return
+            
+            # Check if startup was cancelled (this check might be redundant but keeps it safe)
+            if hasattr(self, 'startup_in_progress') and not getattr(self, 'startup_in_progress', False):
+                # This means it was cancelled, don't proceed
+                self.stop_button.config(state="disabled")
+                return
+            
+            # Check if we have a selected server
+            if not self.selected_server:
+                # Try to select the first available server
+                filtered_servers = self.get_filtered_servers()
+                if filtered_servers:
+                    self.selected_server = filtered_servers[0]
+                    # Update the selected index for consistency
+                    self.settings["selected_server_index"] = 0
+                    self.save_settings()
+                    self.log_status(f"Auto-selected server: {self.selected_server['name']}")
+                else:
+                    self.log_status("No servers available for auto-start - please add servers first")
+                    self.status_label.config(text="No servers available", fg="red")
+                    return
+            
+            self.log_status("Starting automatic farming due to Windows startup setting...")
+            self.status_label.config(text="Auto-starting farming...", fg="green")
+            self.start_afk()
+            
+        except Exception as e:
+            self.log_status(f"Error in auto-start farming: {e}")
+            self.status_label.config(text="Auto-start failed", fg="red")
     
     def show_server_context_menu(self, event):
         """Show context menu for server list"""
@@ -1257,8 +1859,7 @@ Enhanced with BattleMetrics API integration"""
         # Tab 5: Server History Builder
         self.create_add_servers_played_tab()
         
-        # Tab 6: About
-        self.create_about_tab()
+
         
         # Control Buttons
         control_frame = tk.Frame(bottom_frame)
@@ -1290,8 +1891,25 @@ Enhanced with BattleMetrics API integration"""
         links_frame = tk.Frame(bottom_frame)
         links_frame.pack(pady=2)
         
-        version_label = tk.Label(links_frame, text="v1.0.0", font=("Arial", 9), fg="gray")
-        version_label.pack()
+        # Create horizontal layout for version and links
+        version_links_frame = tk.Frame(links_frame)
+        version_links_frame.pack()
+        
+        github_label = tk.Label(version_links_frame, text="GitHub", font=("Arial", 9), fg="blue", cursor="hand2")
+        github_label.pack(side="left", padx=(0, 10))
+        
+        discord_label = tk.Label(version_links_frame, text="Discord", font=("Arial", 9), fg="blue", cursor="hand2")
+        discord_label.pack(side="left")
+        
+        # Add click handlers for links
+        def open_github(event):
+            webbrowser.open("https://github.com/yourusername/rust-afk-hour-adder")
+        
+        def open_discord(event):
+            webbrowser.open("https://discord.gg/yourinvite")
+        
+        github_label.bind("<Button-1>", open_github)
+        discord_label.bind("<Button-1>", open_discord)
         
 
         
@@ -1454,6 +2072,15 @@ Enhanced with BattleMetrics API integration"""
         self.disable_beep_var = tk.BooleanVar(value=self.settings.get("disable_beep", True))
         tk.Checkbutton(system_frame, text="Disable beep sounds", 
                       variable=self.disable_beep_var, command=self.on_beep_change).pack(anchor="w", pady=2)
+        
+        # Update checking settings
+        self.auto_check_updates_var = tk.BooleanVar(value=self.settings.get("auto_check_updates", True))
+        tk.Checkbutton(system_frame, text="Check for updates on startup", 
+                      variable=self.auto_check_updates_var, command=self.on_auto_update_change).pack(anchor="w", pady=2)
+        
+        update_note = tk.Label(system_frame, text="Automatically check for new versions when the program starts", 
+                              font=("Arial", 8), wraplength=350, fg="gray")
+        update_note.pack(anchor="w", padx=20, pady=2)
         
         # Typing mode setting
         typing_mode_frame = tk.Frame(system_frame)
@@ -1619,7 +2246,7 @@ Enhanced with BattleMetrics API integration"""
                       variable=self.stealth_mode_var,
                       command=self.on_stealth_mode_change).pack(anchor="w")
         
-        stealth_note = tk.Label(stealth_frame, text="19min sessions, minimal activity, no respawn cycles", 
+        stealth_note = tk.Label(stealth_frame, text="5-20min random sessions, minimal activity, no respawn cycles", 
                                font=("Arial", 8), wraplength=350)
         stealth_note.pack(anchor="w", padx=20, pady=2)
         
@@ -1651,14 +2278,16 @@ Enhanced with BattleMetrics API integration"""
         # Settings Section
         settings_frame = tk.LabelFrame(content_frame, text="Settings", padx=20, pady=15, font=("Arial", 12, "bold"))
         settings_frame.pack(fill="x", pady=(0, 20))
+        settings_frame.config(height=150)  # Set minimum height to ensure all content is visible
         
         # Create two-column layout for settings
         settings_container = tk.Frame(settings_frame)
-        settings_container.pack(fill="x")
+        settings_container.pack(fill="both", expand=True)
         
         # Left column - Server Selection
-        left_settings = tk.Frame(settings_container)
-        left_settings.pack(side="left", fill="both", expand=True, padx=(0, 20))
+        left_settings = tk.Frame(settings_container, width=250, height=120)
+        left_settings.pack(side="left", fill="y", padx=(0, 20))
+        left_settings.pack_propagate(False)  # Maintain fixed width and height
         
         tk.Label(left_settings, text="Server Selection:", font=("Arial", 11, "bold")).pack(anchor="w", pady=(0, 5))
         
@@ -1667,14 +2296,14 @@ Enhanced with BattleMetrics API integration"""
         
         tk.Radiobutton(left_settings, text="All Servers", variable=self.add_servers_type_var, 
                       value="all", font=("Arial", 10), command=self.on_add_servers_type_change).pack(anchor="w", pady=2)
-        tk.Radiobutton(left_settings, text="Premium Servers Only", variable=self.add_servers_type_var, 
+        tk.Radiobutton(left_settings, text="Premium Only", variable=self.add_servers_type_var, 
                       value="premium", font=("Arial", 10), command=self.on_add_servers_type_change).pack(anchor="w", pady=2)
-        tk.Radiobutton(left_settings, text="Non-Premium Servers Only", variable=self.add_servers_type_var, 
+        tk.Radiobutton(left_settings, text="Non-Premium Only", variable=self.add_servers_type_var, 
                       value="non_premium", font=("Arial", 10), command=self.on_add_servers_type_change).pack(anchor="w", pady=2)
         
         # Right column - Connection Settings
         right_settings = tk.Frame(settings_container)
-        right_settings.pack(side="right", fill="both", expand=True)
+        right_settings.pack(side="left", fill="both", expand=True)
         
         tk.Label(right_settings, text="Connection Settings:", font=("Arial", 11, "bold")).pack(anchor="w", pady=(0, 5))
         
@@ -1750,30 +2379,6 @@ Enhanced with BattleMetrics API integration"""
         # Initialize preview
         self.update_add_servers_preview()
         
-    def create_about_tab(self):
-        """Create the about tab"""
-        about_frame = ttk.Frame(self.notebook)
-        self.notebook.add(about_frame, text="About")
-        
-        # Main content with padding
-        content_frame = tk.Frame(about_frame)
-        content_frame.pack(fill="both", expand=True, padx=20, pady=20)
-        
-        # Purpose
-        purpose_frame = tk.LabelFrame(content_frame, text="Purpose", padx=15, pady=15)
-        purpose_frame.pack(fill="x", pady=(0, 20))
-        
-        purpose_text = tk.Label(purpose_frame, 
-                               text="This tool automates AFK hour farming in Rust that appears on\nBattlemetrics server statistics.\n\nBuild legit looking profiles with accumulated playtime\nJoin higher tier groups that require lots of playtime hours\nAutomatically connects, respawns, and cycles between servers\nRuns 24/7 with minimal user intervention\nReal hours that show up on your Battlemetrics profile\nBuild your server history by connecting to servers briefly\nAppears in your 'Servers Played' history on Battlemetrics", 
-                               font=("Arial", 11), justify="left", wraplength=500)
-        purpose_text.pack()
-        
-        # Links section
-        links_frame = tk.LabelFrame(content_frame, text="Community & Support", padx=15, pady=15)
-        links_frame.pack(fill="x")
-        
-
-        
     def load_settings(self):
         settings_file = os.path.join(self.data_folder, "settings.json")
         try:
@@ -1813,6 +2418,14 @@ Enhanced with BattleMetrics API integration"""
                 self.pause_var.set("25 min")
             else:
                 self.pause_var.set("1 min")  # Default fallback
+            
+            # Initialize checkboxes with loaded settings
+            self.kill_after_movement_var.set(self.settings.get("kill_after_movement", False))
+            self.enable_disconnect_var.set(self.settings.get("enable_startup_disconnect", False))
+            self.disable_beep_var.set(self.settings.get("disable_beep", True))
+            self.auto_check_updates_var.set(self.settings.get("auto_check_updates", True))
+            self.minimal_activity_var.set(self.settings.get("minimal_activity", False))
+            
         except Exception as e:
             self.log_status(f"Error initializing GUI with settings: {e}")
     
@@ -1959,9 +2572,9 @@ Enhanced with BattleMetrics API integration"""
         if selection == "all":
             self.log_status("Server History Builder: All Servers selected")
         elif selection == "premium":
-            self.log_status("Server History Builder: Premium Servers Only selected")
+            self.log_status("Server History Builder: Premium Only selected")
         elif selection == "non_premium":
-            self.log_status("Server History Builder: Non-Premium Servers Only selected")
+            self.log_status("Server History Builder: Non-Premium Only selected")
         
         self.update_add_servers_preview()
         self.save_settings()
@@ -1976,6 +2589,13 @@ Enhanced with BattleMetrics API integration"""
         """Handle beep sounds checkbox change"""
         status = "DISABLED" if self.disable_beep_var.get() else "ENABLED"
         self.log_status(f"Beep sounds: {status}")
+        self.save_settings()
+    
+    def on_auto_update_change(self):
+        """Handle auto check updates checkbox change"""
+        self.settings["auto_check_updates"] = self.auto_check_updates_var.get()
+        status = "ENABLED" if self.auto_check_updates_var.get() else "DISABLED"
+        self.log_status(f"Automatic update checking: {status}")
         self.save_settings()
     
     def on_auto_start_rust_change(self):
@@ -2046,6 +2666,7 @@ Enhanced with BattleMetrics API integration"""
             self.settings["kill_after_movement"] = self.kill_after_movement_var.get()
             self.settings["enable_startup_disconnect"] = self.enable_disconnect_var.get()
             self.settings["disable_beep"] = self.disable_beep_var.get()
+            self.settings["auto_check_updates"] = self.auto_check_updates_var.get()
             self.settings["minimal_activity"] = self.minimal_activity_var.get()
             self.settings["auto_start_rust"] = self.auto_start_rust_var.get()
             self.settings["rust_load_time"] = self.rust_load_time_var.get()
@@ -2117,6 +2738,7 @@ Enhanced with BattleMetrics API integration"""
             self.kill_after_movement_var.set(False)
             self.enable_disconnect_var.set(False)
             self.disable_beep_var.set(True)
+            self.auto_check_updates_var.set(True)
             self.minimal_activity_var.set(False)
             self.auto_start_rust_var.set(True)
             self.rust_load_time_var.set("1 min")
@@ -2626,7 +3248,7 @@ Enhanced with BattleMetrics API integration"""
             self.log_status(f"Auto server switching: ENABLED")
             self.log_status(f"   Servers in rotation: {rotation_count}")
             if self.settings["server_switching"]["stealth_mode"]:
-                self.log_status(f"   Switch interval: 19 minutes (STEALTH MODE)")
+                self.log_status(f"   Switch interval: 5-20 minutes random (STEALTH MODE)")
             else:
                 self.log_status(f"   Switch interval: {self.time_range_var.get()} hours")
         else:
@@ -2644,12 +3266,13 @@ Enhanced with BattleMetrics API integration"""
         self.current_server_start_time = datetime.now()  # Track when this server session started
         
         if self.stealth_mode_var.get():
-            # Stealth mode: Switch after 19 minutes
-            self.next_server_switch_time = self.current_server_start_time + timedelta(minutes=19)
+            # Stealth mode: Switch after random 5-20 minutes for better stealth
+            stealth_minutes = random.randint(5, 20)
+            self.next_server_switch_time = self.current_server_start_time + timedelta(minutes=stealth_minutes)
             
             self.log_status(f"NEXT SERVER SWITCH SCHEDULED (STEALTH MODE):")
             self.log_status(f"   Time: {self.next_server_switch_time.strftime('%Y-%m-%d %H:%M:%S')}")
-            self.log_status(f"   Duration: 19 minutes from now")
+            self.log_status(f"   Duration: {stealth_minutes} minutes from now (randomized 5-20min)")
             self.log_status(f"   Mode: Connect → Kill → Wait → Switch (minimal activity)")
         else:
             # Normal mode - use configured time range
@@ -3160,7 +3783,7 @@ Enhanced with BattleMetrics API integration"""
         step_duration = (datetime.now() - step_start).total_seconds()
         self.log_status(f"STEALTH STEP 4 COMPLETED in {step_duration:.1f}s - Player eliminated for stealth mode")
         
-        self.log_status("=== STEALTH MODE: Now waiting for server switch time (19 minutes) ===")
+        self.log_status("=== STEALTH MODE: Now waiting for server switch time (randomized 5-20min) ===")
         self.log_status("   Player is dead - minimal server activity - accumulating hours silently")
     
     def is_rust_running(self):
@@ -3464,6 +4087,17 @@ Enhanced with BattleMetrics API integration"""
         stop_time = datetime.now()
         self.is_running = False
         
+        # Cancel startup countdown if it's in progress
+        if hasattr(self, 'startup_in_progress') and self.startup_in_progress:
+            self.startup_in_progress = False
+            self.log_status("Windows startup auto-farming cancelled by user")
+            self.status_label.config(text="Startup auto-farming cancelled", fg="red")
+            # Disable stop button since countdown is cancelled
+            self.stop_button.config(state="disabled")
+            # Reset status after a few seconds
+            self.root.after(3000, lambda: self.status_label.config(text="Ready", fg="blue"))
+            return
+        
         # Also stop server adding if it's running
         if self.is_adding_servers:
             self.stop_add_servers()
@@ -3720,7 +4354,7 @@ Enhanced with BattleMetrics API integration"""
             selected_count = non_premium_servers
             selected_premium = 0
             selected_non_premium = non_premium_servers
-            type_text = "Non-Premium Servers Only"
+            type_text = "Non-Premium Only"
         
         # Left side - What will be processed
         if selected_count == 0:
@@ -4062,8 +4696,9 @@ class ServerRotationDialog:
         
         self.dialog = tk.Toplevel(parent)
         self.dialog.title("Select Servers for Rotation")
-        self.dialog.geometry("500x400")
-        self.dialog.resizable(False, False)
+        self.dialog.geometry("600x500")
+        self.dialog.resizable(True, True)
+        self.dialog.minsize(500, 400)
         self.dialog.grab_set()
         self.dialog.transient(parent)
         
@@ -4073,7 +4708,7 @@ class ServerRotationDialog:
         # Server list with checkboxes
         self.server_vars = []
         server_frame = tk.Frame(self.dialog)
-        server_frame.pack(fill="both", expand=True, padx=20, pady=10)
+        server_frame.pack(fill="both", expand=True, padx=20, pady=(10, 0))
         
         # Scrollable frame
         canvas = tk.Canvas(server_frame)
@@ -4101,25 +4736,37 @@ class ServerRotationDialog:
         canvas.pack(side="left", fill="both", expand=True)
         scrollbar.pack(side="right", fill="y")
         
-        # Buttons
+        # Buttons - use pack with side="bottom" to ensure they stay at bottom
         button_frame = tk.Frame(self.dialog)
-        button_frame.pack(pady=20)
+        button_frame.pack(side="bottom", fill="x", pady=20, padx=20)
+        
+        # Action buttons (bottom row) - most important buttons first
+        action_frame = tk.Frame(button_frame)
+        action_frame.pack(side="bottom", pady=(10, 0))
+        
+        ok_btn = tk.Button(action_frame, text="OK", command=self.save_selection, 
+                          bg="#4CAF50", fg="white", font=("Arial", 10, "bold"), width=10)
+        ok_btn.pack(side="left", padx=10)
+        
+        cancel_btn = tk.Button(action_frame, text="Cancel", command=self.dialog.destroy,
+                              bg="#f44336", fg="white", font=("Arial", 10, "bold"), width=10)
+        cancel_btn.pack(side="left", padx=10)
+        
+        # Bind keyboard shortcuts
+        self.dialog.bind('<Return>', lambda e: self.save_selection())
+        self.dialog.bind('<Escape>', lambda e: self.dialog.destroy())
+        
+        # Set focus to OK button
+        ok_btn.focus_set()
         
         # Quick selection buttons (top row)
         quick_frame = tk.Frame(button_frame)
-        quick_frame.pack(pady=(0, 10))
+        quick_frame.pack(side="bottom", pady=(0, 10))
         
-        tk.Button(quick_frame, text="Select All", command=self.select_all).pack(side="left", padx=5)
-        tk.Button(quick_frame, text="Clear All", command=self.clear_all).pack(side="left", padx=5)
-        tk.Button(quick_frame, text="Premium Only", command=self.select_premium_only).pack(side="left", padx=5)
-        tk.Button(quick_frame, text="Non-Premium Only", command=self.select_non_premium_only).pack(side="left", padx=5)
-        
-        # Action buttons (bottom row)
-        action_frame = tk.Frame(button_frame)
-        action_frame.pack()
-        
-        tk.Button(action_frame, text="OK", command=self.save_selection).pack(side="left", padx=10)
-        tk.Button(action_frame, text="Cancel", command=self.dialog.destroy).pack(side="left", padx=10)
+        tk.Button(quick_frame, text="Select All", command=self.select_all, width=12).pack(side="left", padx=5)
+        tk.Button(quick_frame, text="Clear All", command=self.clear_all, width=12).pack(side="left", padx=5)
+        tk.Button(quick_frame, text="Premium Only", command=self.select_premium_only, width=12).pack(side="left", padx=5)
+        tk.Button(quick_frame, text="Non-Premium Only", command=self.select_non_premium_only, width=16).pack(side="left", padx=5)
     
     def select_all(self):
         for var in self.server_vars:
