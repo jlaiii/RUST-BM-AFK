@@ -66,7 +66,7 @@ pyautogui.FAILSAFE = False
 class RustAFKHourAdder:
     def __init__(self):
         # Version information
-        self.current_version = "1.2.0"
+        self.current_version = "1.3.0"
         self.github_repo = "jlaiii/RUST-BM-AFK"
         self.version_url = f"https://raw.githubusercontent.com/{self.github_repo}/main/version.json"
         self.script_url = f"https://raw.githubusercontent.com/{self.github_repo}/main/rust_battlemetrics_hour_adder.py"
@@ -238,7 +238,7 @@ class RustAFKHourAdder:
         header_frame = tk.Frame(update_window, bg="#2c3e50")
         header_frame.pack(fill="x", pady=(0, 10))
         
-        tk.Label(header_frame, text="🚀 Update Available!", 
+        tk.Label(header_frame, text="Update Available!", 
                 font=("Arial", 16, "bold"), fg="white", bg="#2c3e50").pack(pady=10)
         
         # Version info
@@ -440,7 +440,7 @@ class RustAFKHourAdder:
         header_frame = tk.Frame(changelog_window, bg="#34495e")
         header_frame.pack(fill="x")
         
-        tk.Label(header_frame, text="📋 Version History", 
+        tk.Label(header_frame, text="Version History", 
                 font=("Arial", 16, "bold"), fg="white", bg="#34495e").pack(pady=10)
         
         # Changelog content
@@ -481,24 +481,27 @@ class RustAFKHourAdder:
     
     def show_about(self):
         """Show about dialog"""
-        about_text = f"""RUST Battlemetrics AFK Hour Adder Tool
-Version: {self.current_version}
+        about_text = f"""RUST BM AFK Tool v{self.current_version}
 
-A tool to help manage AFK time on Rust servers through Battlemetrics.
+What this tool does:
+• Adds hours to your Rust account automatically
+• Farms hours while you're away from computer
+• Builds legit looking gaming profiles
+• Join high hour requirement groups and servers
+• Works with any Rust server via Battlemetrics
 
-Features:
-• Automated AFK farming with customizable intervals
-• Server management and validation
-• Battlemetrics integration
+Key Features:
+• Multiple server support with auto-switching
+• Smart AFK detection avoidance
 • Automatic updates
-• Multiple typing modes
-• Server switching capabilities
+• Safe and undetectable operation
+• Easy setup and use
 
-GitHub: {self.github_repo}
+Perfect for building up your Rust profile hours!
 
-© 2025 - Open Source Project"""
+GitHub: github.com/{self.github_repo}"""
         
-        messagebox.showinfo("About", about_text)
+        messagebox.showinfo("About RUST BM AFK Tool", about_text)
     
     def load_servers(self):
         """Load servers from JSON file"""
@@ -1724,23 +1727,27 @@ GitHub: {self.github_repo}
 
     def show_about(self):
         """Show about dialog"""
-        about_text = f"""Rust Battlemetrics AFK Hour Adder Tool
-        
-Version: {self.current_version}
-        
-Features:
-• AFK hour farming with multiple servers
-• Enhanced BattleMetrics integration
-• Server validation and info updates
-• Real-time progress tracking
-• Automatic update checking
+        about_text = f"""RUST BM AFK Tool v{self.current_version}
 
-Created for Rust server hour farming
-Enhanced with BattleMetrics API integration
+What this tool does:
+• Adds hours to your Rust account automatically
+• Farms hours while you're away from computer
+• Builds legit looking gaming profiles
+• Join high hour requirement groups and servers
+• Works with any Rust server via Battlemetrics
 
-GitHub: https://github.com/{self.github_repo}"""
+Key Features:
+• Multiple server support with auto-switching
+• Smart AFK detection avoidance
+• Automatic updates
+• Safe and undetectable operation
+• Easy setup and use
+
+Perfect for building up your Rust profile hours!
+
+GitHub: github.com/{self.github_repo}"""
         
-        messagebox.showinfo("About", about_text)
+        messagebox.showinfo("About RUST BM AFK Tool", about_text)
     
     def check_for_updates(self):
         """Check for updates from GitHub"""
@@ -1804,6 +1811,12 @@ GitHub: https://github.com/{self.github_repo}"""
         changelog = version_info.get("changelog", [])
         download_url = version_info.get("download_url", f"https://github.com/{self.github_repo}/releases/latest")
         
+        # Check if auto-update is enabled
+        if self.settings.get("auto_update", False):
+            self.log_status(f"Auto-update enabled, installing version {remote_version} automatically...")
+            self.start_update_process(None, version_info)
+            return
+        
         # Create update dialog
         update_window = tk.Toplevel(self.root)
         update_window.title("Update Available")
@@ -1822,7 +1835,7 @@ GitHub: https://github.com/{self.github_repo}"""
         header_frame = tk.Frame(update_window, bg="#4CAF50")
         header_frame.pack(fill="x", pady=(0, 20))
         
-        tk.Label(header_frame, text="🎉 Update Available!", 
+        tk.Label(header_frame, text="Update Available!", 
                 font=("Arial", 16, "bold"), bg="#4CAF50", fg="white").pack(pady=15)
         
         # Content frame
@@ -1866,14 +1879,19 @@ GitHub: https://github.com/{self.github_repo}"""
         button_frame = tk.Frame(update_window)
         button_frame.pack(fill="x", padx=20, pady=20)
         
-        tk.Button(button_frame, text="Download Update", 
-                 command=lambda: self.open_download_page(download_url, update_window),
+        tk.Button(button_frame, text="Update Now", 
+                 command=lambda: self.start_update_process(update_window, version_info),
                  bg="#4CAF50", fg="white", font=("Arial", 11, "bold"),
                  width=15).pack(side="right", padx=(10, 0))
         
+        tk.Button(button_frame, text="View on GitHub", 
+                 command=lambda: self.open_download_page(download_url, update_window),
+                 bg="#3498db", fg="white", font=("Arial", 11),
+                 width=12).pack(side="right", padx=(0, 10))
+        
         tk.Button(button_frame, text="Later", 
                  command=update_window.destroy,
-                 bg="#gray", fg="white", font=("Arial", 11),
+                 bg="#95a5a6", fg="white", font=("Arial", 11),
                  width=10).pack(side="right")
         
         self.log_status(f"Update available: v{remote_version} (current: v{self.current_version})")
@@ -1917,6 +1935,12 @@ GitHub: https://github.com/{self.github_repo}"""
         changelog = version_info.get("changelog", [])
         download_url = version_info.get("download_url", f"https://github.com/{self.github_repo}/releases/latest")
         
+        # Check if auto-update is enabled
+        if self.settings.get("auto_update", False):
+            self.log_status(f"Auto-update enabled, installing version {remote_version} automatically...")
+            self.start_update_process(None, version_info)
+            return
+        
         # Create update dialog
         update_window = tk.Toplevel(self.root)
         update_window.title("Update Available")
@@ -1935,7 +1959,7 @@ GitHub: https://github.com/{self.github_repo}"""
         header_frame = tk.Frame(update_window, bg="#4CAF50")
         header_frame.pack(fill="x", pady=(0, 20))
         
-        tk.Label(header_frame, text="🎉 Update Available!", 
+        tk.Label(header_frame, text="Update Available!", 
                 font=("Arial", 16, "bold"), bg="#4CAF50", fg="white").pack(pady=15)
         
         # Content frame
@@ -1993,7 +2017,7 @@ GitHub: https://github.com/{self.github_repo}"""
                 self.auto_check_updates_var.set(False)
                 self.save_settings()
                 self.log_status("Automatic update checking disabled by user")
-            self.open_download_page(download_url, update_window)
+            self.start_update_process(update_window, version_info)
         
         def on_later():
             if dont_ask_var.get():
@@ -2003,14 +2027,19 @@ GitHub: https://github.com/{self.github_repo}"""
                 self.log_status("Automatic update checking disabled by user")
             update_window.destroy()
         
-        tk.Button(button_frame, text="Download Update", 
+        tk.Button(button_frame, text="Update Now", 
                  command=on_download,
                  bg="#4CAF50", fg="white", font=("Arial", 11, "bold"),
                  width=15).pack(side="right", padx=(10, 0))
         
+        tk.Button(button_frame, text="View on GitHub", 
+                 command=lambda: self.open_download_page(download_url, update_window),
+                 bg="#3498db", fg="white", font=("Arial", 11),
+                 width=12).pack(side="right", padx=(0, 10))
+        
         tk.Button(button_frame, text="Later", 
                  command=on_later,
-                 bg="#gray", fg="white", font=("Arial", 11),
+                 bg="#95a5a6", fg="white", font=("Arial", 11),
                  width=10).pack(side="right")
         
         self.log_status(f"Background update check: v{remote_version} available (current: v{self.current_version})")
@@ -2473,14 +2502,18 @@ GitHub: https://github.com/{self.github_repo}"""
         tk.Checkbutton(system_frame, text="Check for updates on startup", 
                       variable=self.auto_check_updates_var, command=self.on_auto_update_check_change).pack(anchor="w", pady=2)
         
+        check_note = tk.Label(system_frame, text="Automatically check for new versions when the program starts", 
+                             font=("Arial", 8), wraplength=350, fg="gray")
+        check_note.pack(anchor="w", padx=20, pady=(0, 5))
+        
         # Auto update settings
         self.auto_update_var = tk.BooleanVar(value=self.settings.get("auto_update", False))
         tk.Checkbutton(system_frame, text="Automatically install updates (no confirmation)", 
                       variable=self.auto_update_var, command=self.on_auto_update_change).pack(anchor="w", pady=2)
         
-        update_note = tk.Label(system_frame, text="Automatically check and optionally install new versions when available", 
-                              font=("Arial", 8), wraplength=350, fg="gray")
-        update_note.pack(anchor="w", padx=20, pady=2)
+        install_note = tk.Label(system_frame, text="Download and install updates automatically without showing confirmation dialogs", 
+                               font=("Arial", 8), wraplength=350, fg="gray")
+        install_note.pack(anchor="w", padx=20, pady=(0, 5))
         
         # Typing mode setting
         typing_mode_frame = tk.Frame(system_frame)

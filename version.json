@@ -1,16 +1,79 @@
 {
-  "version": "1.2.0",
+  "version": "1.3.0",
   "release_date": "2025-10-09",
   "download_url": "https://github.com/jlaiii/RUST-BM-AFK/releases/latest",
   "github_url": "https://github.com/jlaiii/RUST-BM-AFK",
   "changelog": [
-    "Added auto-update checkbox in Basic Settings",
-    "Users can now enable automatic updates without confirmation",
-    "Enhanced update system with better user control",
-    "Improved settings organization for update preferences",
-    "Auto-update disabled by default for safety"
+    "Redesigned About page with user-friendly language",
+    "Clear explanation of what the tool does for users",
+    "Highlights key benefits like building gaming profiles",
+    "Mentions joining high hour requirement groups",
+    "More appealing and straightforward description"
   ],
   "version_history": [
+    {
+      "version": "1.3.0",
+      "release_date": "2025-10-09",
+      "changelog": [
+        "Redesigned About page with user-friendly language",
+        "Clear explanation of what the tool does for users",
+        "Highlights key benefits like building gaming profiles",
+        "Mentions joining high hour requirement groups",
+        "More appealing and straightforward description"
+      ]
+    },
+    {
+      "version": "1.2.5",
+      "release_date": "2025-10-09",
+      "changelog": [
+        "Improved help text layout with individual notes under each checkbox",
+        "Professional and clear descriptions for each setting",
+        "Better user interface organization",
+        "Enhanced settings readability"
+      ]
+    },
+    {
+      "version": "1.2.4",
+      "release_date": "2025-10-09",
+      "changelog": [
+        "Fixed confusing help text for update settings",
+        "Clarified what each checkbox does in the settings",
+        "Improved user interface clarity",
+        "Better explanation of auto-update functionality"
+      ]
+    },
+    {
+      "version": "1.2.3",
+      "release_date": "2025-10-09",
+      "changelog": [
+        "Fixed auto-update checkbox to work properly",
+        "When auto-update is enabled, updates install without any confirmation dialogs",
+        "Auto-update now works for both manual and background update checks",
+        "Improved automatic update functionality",
+        "Enhanced user experience for hands-off updates"
+      ]
+    },
+    {
+      "version": "1.2.2",
+      "release_date": "2025-10-09",
+      "changelog": [
+        "Update Now button automatically downloads and installs updates",
+        "No more redirecting to GitHub for manual downloads",
+        "Added View on GitHub button as optional alternative",
+        "Improved user experience with one-click updates",
+        "Enhanced update dialog functionality"
+      ]
+    },
+    {
+      "version": "1.2.1",
+      "release_date": "2025-10-09",
+      "changelog": [
+        "Fixed invalid color error in update dialogs",
+        "Removed emojis from update notifications for better compatibility",
+        "Improved button styling consistency",
+        "Enhanced cross-platform compatibility"
+      ]
+    },
     {
       "version": "1.2.0",
       "release_date": "2025-10-09",
