@@ -1,16 +1,38 @@
 {
-  "version": "1.3.0",
+  "version": "1.3.2",
   "release_date": "2025-10-09",
   "download_url": "https://github.com/jlaiii/RUST-BM-AFK/releases/latest",
   "github_url": "https://github.com/jlaiii/RUST-BM-AFK",
   "changelog": [
-    "Redesigned About page with user-friendly language",
-    "Clear explanation of what the tool does for users",
-    "Highlights key benefits like building gaming profiles",
-    "Mentions joining high hour requirement groups",
-    "More appealing and straightforward description"
+    "TEST UPDATE - Verifying auto-update system works correctly",
+    "Testing countdown timer and automatic restart functionality",
+    "Ensuring update notifications appear properly",
+    "Validating download and installation process",
+    "This is a test version to confirm update system reliability"
   ],
   "version_history": [
+    {
+      "version": "1.3.2",
+      "release_date": "2025-10-09",
+      "changelog": [
+        "TEST UPDATE - Verifying auto-update system works correctly",
+        "Testing countdown timer and automatic restart functionality",
+        "Ensuring update notifications appear properly",
+        "Validating download and installation process",
+        "This is a test version to confirm update system reliability"
+      ]
+    },
+    {
+      "version": "1.3.1",
+      "release_date": "2025-10-09",
+      "changelog": [
+        "Added countdown timer after update completion",
+        "Automatic restart with 5-second countdown",
+        "Improved restart reliability on Windows",
+        "Better update completion user experience",
+        "Enhanced restart process with subprocess method"
+      ]
+    },
     {
       "version": "1.3.0",
       "release_date": "2025-10-09",

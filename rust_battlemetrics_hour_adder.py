@@ -66,7 +66,7 @@ pyautogui.FAILSAFE = False
 class RustAFKHourAdder:
     def __init__(self):
         # Version information
-        self.current_version = "1.3.0"
+        self.current_version = "1.3.2"
         self.github_repo = "jlaiii/RUST-BM-AFK"
         self.version_url = f"https://raw.githubusercontent.com/{self.github_repo}/main/version.json"
         self.script_url = f"https://raw.githubusercontent.com/{self.github_repo}/main/rust_battlemetrics_hour_adder.py"
@@ -369,18 +369,12 @@ class RustAFKHourAdder:
                 
                 update_progress(100, "Update complete!")
                 
-                # Step 5: Show success and restart
+                # Step 5: Show countdown and restart
                 time.sleep(1)
                 progress_window.destroy()
                 
-                # Show success message
-                result = messagebox.askyesno("Update Complete", 
-                    f"Successfully updated to version {remote_data.get('version')}!\n\n"
-                    "The application will now restart to apply changes.\n\n"
-                    "Restart now?")
-                
-                if result:
-                    self.restart_application()
+                # Show countdown dialog
+                self.show_restart_countdown(remote_data.get('version', 'Unknown'))
                 
             except Exception as e:
                 progress_window.destroy()
@@ -388,6 +382,82 @@ class RustAFKHourAdder:
         
         # Start update in background
         threading.Thread(target=perform_update, daemon=True).start()
+    
+    def show_restart_countdown(self, new_version):
+        """Show countdown dialog before restarting"""
+        # Create countdown window
+        countdown_window = tk.Toplevel(self.root)
+        countdown_window.title("Update Complete")
+        countdown_window.geometry("400x250")
+        countdown_window.resizable(False, False)
+        countdown_window.transient(self.root)
+        countdown_window.grab_set()
+        
+        # Center the window
+        countdown_window.geometry("+%d+%d" % (self.root.winfo_rootx() + 100, self.root.winfo_rooty() + 100))
+        
+        # Header
+        header_frame = tk.Frame(countdown_window, bg="#27ae60")
+        header_frame.pack(fill="x", pady=(0, 20))
+        
+        tk.Label(header_frame, text="Update Complete!", 
+                font=("Arial", 16, "bold"), fg="white", bg="#27ae60").pack(pady=15)
+        
+        # Content
+        content_frame = tk.Frame(countdown_window)
+        content_frame.pack(fill="both", expand=True, padx=20)
+        
+        tk.Label(content_frame, text=f"Successfully updated to version {new_version}!", 
+                font=("Arial", 12, "bold"), fg="#27ae60").pack(pady=10)
+        
+        tk.Label(content_frame, text="The application will restart automatically in:", 
+                font=("Arial", 11)).pack(pady=5)
+        
+        # Countdown label
+        countdown_label = tk.Label(content_frame, text="5", 
+                                  font=("Arial", 24, "bold"), fg="#e74c3c")
+        countdown_label.pack(pady=15)
+        
+        # Buttons
+        button_frame = tk.Frame(content_frame)
+        button_frame.pack(fill="x", pady=10)
+        
+        tk.Button(button_frame, text="Restart Now", 
+                 bg="#27ae60", fg="white", font=("Arial", 11, "bold"),
+                 command=lambda: self.restart_from_countdown(countdown_window)).pack(side="left", padx=(0, 10))
+        
+        tk.Button(button_frame, text="Cancel", 
+                 bg="#95a5a6", fg="white", font=("Arial", 11),
+                 command=countdown_window.destroy).pack(side="left")
+        
+        # Start countdown
+        self.countdown_value = 5
+        self.countdown_active = True
+        
+        def update_countdown():
+            if self.countdown_active and self.countdown_value > 0:
+                countdown_label.config(text=str(self.countdown_value))
+                self.countdown_value -= 1
+                countdown_window.after(1000, update_countdown)
+            elif self.countdown_active:
+                # Countdown finished, restart
+                self.restart_from_countdown(countdown_window)
+        
+        # Handle window close
+        def on_close():
+            self.countdown_active = False
+            countdown_window.destroy()
+        
+        countdown_window.protocol("WM_DELETE_WINDOW", on_close)
+        
+        # Start the countdown
+        update_countdown()
+    
+    def restart_from_countdown(self, countdown_window):
+        """Restart application from countdown dialog"""
+        self.countdown_active = False
+        countdown_window.destroy()
+        self.restart_application()
     
     def restart_application(self):
         """Restart the application"""
@@ -398,20 +468,28 @@ class RustAFKHourAdder:
             # Get the script path
             script_path = os.path.abspath(__file__)
             
-            # Close current application
-            self.root.quit()
-            self.root.destroy()
+            # Log the restart attempt
+            self.log_status("Restarting application...")
             
-            # Restart using subprocess
+            # Close current application gracefully
+            self.root.quit()
+            
+            # Use subprocess to restart (more reliable than os.execv on Windows)
             if getattr(sys, 'frozen', False):
                 # If running as exe
-                os.execv(sys.executable, [sys.executable])
+                subprocess.Popen([sys.executable])
             else:
                 # If running as Python script
-                os.execv(sys.executable, [sys.executable, script_path])
+                subprocess.Popen([sys.executable, script_path])
+            
+            # Exit current process
+            sys.exit(0)
                 
         except Exception as e:
-            messagebox.showerror("Restart Failed", f"Failed to restart application: {e}\n\nPlease restart manually.")
+            try:
+                messagebox.showerror("Restart Failed", f"Failed to restart application: {e}\n\nPlease restart manually.")
+            except:
+                pass
             sys.exit(0)
     
     def show_changelog(self):
