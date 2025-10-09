@@ -1,6 +1,8 @@
 import subprocess
 import sys
 import os
+import socket
+import concurrent.futures
 
 def install_package(package):
     """Install a package using pip"""
@@ -16,7 +18,8 @@ def check_and_install_dependencies():
         'keyboard': 'keyboard==0.13.5',
         'pyautogui': 'pyautogui==0.9.54',
         'pygetwindow': 'pygetwindow==0.0.9',
-        'psutil': 'psutil==5.9.0'
+        'psutil': 'psutil==5.9.0',
+        'requests': 'requests'
     }
     
     missing_packages = []
@@ -52,6 +55,8 @@ import pyautogui
 import winsound
 import random
 from datetime import datetime, timedelta
+import requests
+import re
 
 # Disable pyautogui failsafe to prevent accidental mouse movement from stopping the program
 pyautogui.FAILSAFE = False
@@ -63,6 +68,9 @@ class RustAFKHourAdder:
         self.root.geometry("900x730")  # Slightly taller to show all content
         self.root.resizable(True, True)  # Allow resizing so users can adjust if needed
         self.root.minsize(600, 400)  # Set minimum window size for usability
+        
+        # Create menu bar
+        self.create_menu_bar()
         
         # Create data folder
         self.data_folder = "data"
@@ -110,8 +118,8 @@ class RustAFKHourAdder:
         self.current_add_servers_list = []
         self.current_add_server_index = 0
         
-        # Initialize log file path
-        self.log_file = os.path.join(self.data_folder, f"afk_log_{datetime.now().strftime('%Y%m%d')}.txt")
+        # Initialize log file path - use consistent filename
+        self.log_file = os.path.join(self.data_folder, "afk_log.txt")
         
         # Load servers from separate file
         self.servers = self.load_servers()
@@ -121,6 +129,31 @@ class RustAFKHourAdder:
         
         self.load_settings()
         self.create_gui()
+    
+    def create_menu_bar(self):
+        """Create the application menu bar"""
+        menubar = tk.Menu(self.root)
+        self.root.config(menu=menubar)
+        
+        # Servers menu
+        servers_menu = tk.Menu(menubar, tearoff=0)
+        menubar.add_cascade(label="Servers", menu=servers_menu)
+        servers_menu.add_command(label="Validate Servers", command=self.validate_servers)
+        servers_menu.add_command(label="Update Server Info", command=lambda: self.validate_servers())
+        servers_menu.add_separator()
+        servers_menu.add_command(label="Import from File...", command=self.import_servers_from_file)
+        servers_menu.add_command(label="Export to File...", command=self.export_servers_to_file)
+        
+        # Tools menu
+        tools_menu = tk.Menu(menubar, tearoff=0)
+        menubar.add_cascade(label="Tools", menu=tools_menu)
+        tools_menu.add_command(label="Clear Log", command=self.clear_log)
+        tools_menu.add_command(label="Open Data Folder", command=self.open_data_folder)
+        
+        # Help menu
+        help_menu = tk.Menu(menubar, tearoff=0)
+        menubar.add_cascade(label="Help", menu=help_menu)
+        help_menu.add_command(label="About", command=self.show_about)
     
     def load_servers(self):
         """Load servers from JSON file"""
@@ -159,6 +192,948 @@ class RustAFKHourAdder:
                 json.dump(servers_to_save, f, indent=2)
         except Exception as e:
             self.log_status(f"Error saving servers: {e}")
+    
+    def ping_server(self, server_ip, timeout=5):
+        """Check if a Rust server is online using multiple methods"""
+        try:
+            # Parse IP and port
+            if ':' in server_ip:
+                ip, port = server_ip.split(':')
+                port = int(port)
+            else:
+                ip = server_ip
+                port = 28015  # Default Rust port
+            
+            # Method 1: Try to resolve hostname (for domain-based servers)
+            try:
+                socket.gethostbyname(ip)
+            except socket.gaierror:
+                return False  # Can't resolve hostname
+            
+            # Method 2: Try UDP ping on the game port (Rust uses UDP)
+            try:
+                sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+                sock.settimeout(timeout)
+                # Send a simple UDP packet
+                sock.sendto(b'\x00', (ip, port))
+                sock.close()
+                # If no exception, server is likely reachable
+                return True
+            except:
+                pass
+            
+            # Method 3: Try TCP connection on query port (usually game_port + 1)
+            try:
+                query_port = port + 1
+                sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+                sock.settimeout(timeout)
+                result = sock.connect_ex((ip, query_port))
+                sock.close()
+                if result == 0:
+                    return True
+            except:
+                pass
+            
+            # Method 4: Try ICMP ping to the IP
+            try:
+                import subprocess
+                import platform
+                
+                # Use system ping command
+                param = '-n' if platform.system().lower() == 'windows' else '-c'
+                command = ['ping', param, '1', '-w', str(timeout * 1000), ip]
+                
+                result = subprocess.run(command, capture_output=True, text=True, timeout=timeout + 2)
+                return result.returncode == 0
+            except:
+                pass
+            
+            return False  # All methods failed
+            
+        except Exception as e:
+            return False
+    
+    def check_server_battlemetrics(self, server_ip, timeout=10, server_name=None):
+        """Check server status using Battlemetrics API (more accurate but slower)"""
+        try:
+            # Use the enhanced search from get_server_info_battlemetrics
+            server_info = self.get_server_info_battlemetrics(server_ip, timeout, server_name=server_name)
+            
+            if server_info:
+                # Found server on BattleMetrics, check status
+                status = server_info.get('status')
+                return status == 'online'
+            else:
+                # Server not found on Battlemetrics, fallback to ping
+                self.log_status(f"Server {server_ip} not found on BattleMetrics, using ping fallback")
+                return self.ping_server(server_ip, timeout)
+                
+        except Exception as e:
+            # API method failed, fallback to ping
+            self.log_status(f"BattleMetrics check failed for {server_ip}: {e}, using ping fallback")
+            return self.ping_server(server_ip, timeout)
+    
+    def get_server_info_battlemetrics(self, server_ip, timeout=10, server_name=None):
+        """Get detailed server information from Battlemetrics API"""
+        try:
+            # Parse IP and port
+            if ':' in server_ip:
+                original_ip, port = server_ip.split(':')
+            else:
+                original_ip = server_ip
+                port = "28015"
+            
+            # Try to resolve domain name to IP if it's a domain
+            resolved_ip = original_ip
+            is_domain = False
+            
+            # Check if it's a domain name (contains letters)
+            if not original_ip.replace('.', '').replace('-', '').isdigit():
+                is_domain = True
+                try:
+                    resolved_ip = socket.gethostbyname(original_ip)
+                    self.log_status(f"Resolved {original_ip} to {resolved_ip}")
+                except socket.gaierror:
+                    self.log_status(f"Could not resolve domain {original_ip}")
+                    resolved_ip = original_ip
+            
+            def extract_server_info(server):
+                """Helper function to extract server info"""
+                attributes = server.get('attributes', {})
+                details = attributes.get('details', {})
+                
+                # Determine premium status based on server name
+                server_name = attributes.get('name', '').lower()
+                premium_indicators = [
+                    'rustafied', 'rusty moose', 'rusticated', 'facepunch'
+                ]
+                is_premium = any(indicator in server_name for indicator in premium_indicators)
+                
+                return {
+                    'battlemetrics_id': server.get('id'),
+                    'name': attributes.get('name', 'Unknown'),
+                    'status': attributes.get('status'),
+                    'players': attributes.get('players', 0),
+                    'maxPlayers': attributes.get('maxPlayers', 0),
+                    'rank': attributes.get('rank'),
+                    'country': attributes.get('country'),
+                    'official': details.get('official', False),
+                    'premium': is_premium,
+                    'modded': details.get('modded', False),
+                    'pve': details.get('pve', False),
+                    'map': details.get('map', 'Unknown'),
+                    'last_updated': attributes.get('updatedAt'),
+                    'rust_type': details.get('rust_type'),
+                    'rust_build': details.get('rust_build'),
+                    'serverSteamId': details.get('serverSteamId'),
+                }
+            
+            # Try multiple search strategies
+            search_attempts = []
+            
+            # 1. Search by resolved IP (most likely to work for domains)
+            if resolved_ip != original_ip:
+                search_attempts.append(('resolved_ip', resolved_ip))
+            
+            # 2. Search by original input (in case it's already an IP)
+            search_attempts.append(('original', original_ip))
+            
+            # 3. If it's a domain, try searching by domain parts in server names
+            if is_domain:
+                domain_parts = original_ip.lower().split('.')
+                # Use the most distinctive part of the domain for search
+                for part in domain_parts:
+                    if len(part) > 3 and part not in ['com', 'net', 'org', 'gg', 'co']:
+                        search_attempts.append(('domain_part', part))
+                        break
+            
+            # 4. If we have the server name from our database, try searching by name parts
+            if server_name:
+                # Extract meaningful words from server name for search
+                # Clean up the server name: remove brackets, pipes, apostrophes, and other special chars
+                cleaned_name = re.sub(r"['\[\]|&\-_]", ' ', server_name.lower())
+                name_words = cleaned_name.split()
+                distinctive_words = []
+                
+                # Filter out common words and keep distinctive ones
+                common_words = {'us', 'eu', 'na', 'server', 'rust', 'the', 'and', 'or', 'of', 'in', 'on', 'at', 'to', 'for', 'with', 'by', 'x', 'solo', 'duo', 'trio', 'quad', 'max', 'main', 'large', 'small', 'medium'}
+                for word in name_words:
+                    # Remove any remaining special characters and check if it's a meaningful word
+                    clean_word = re.sub(r'[^a-z0-9]', '', word)
+                    if len(clean_word) > 3 and clean_word not in common_words and not clean_word.isdigit() and not re.match(r'^\d+x?$', clean_word):
+                        distinctive_words.append(clean_word)
+                
+                # Add the most distinctive words as search terms
+                for word in distinctive_words[:3]:  # Try up to 3 distinctive words
+                    search_attempts.append(('server_name_part', word))
+            
+            for search_type, search_term in search_attempts:
+                self.log_status(f"Searching BattleMetrics for {search_term} (method: {search_type})")
+                
+                search_url = f"https://api.battlemetrics.com/servers"
+                params = {
+                    'filter[game]': 'rust',
+                    'filter[search]': search_term,
+                    'page[size]': 50  # Increased to get more results
+                }
+                
+                response = requests.get(search_url, params=params, timeout=timeout)
+                
+                # Handle rate limiting
+                if response.status_code == 429:
+                    self.log_status("Rate limited by BattleMetrics API, waiting...")
+                    time.sleep(2)
+                    continue
+                
+                if response.status_code == 200:
+                    data = response.json()
+                    servers = data.get('data', [])
+                    
+                    self.log_status(f"Found {len(servers)} potential matches for {search_term}")
+                    
+                    # Strategy 1: Look for exact IP:port match
+                    for server in servers:
+                        attributes = server.get('attributes', {})
+                        server_ip_attr = attributes.get('ip')
+                        server_port_attr = str(attributes.get('port', ''))
+                        
+                        # Check against both resolved and original IP
+                        if ((server_ip_attr == resolved_ip or server_ip_attr == original_ip) 
+                            and server_port_attr == port):
+                            self.log_status(f"Found exact IP:port match: {server_ip_attr}:{server_port_attr}")
+                            return extract_server_info(server)
+                    
+                    # Strategy 2: If searching by domain part, look for name matches
+                    if search_type == 'domain_part' and is_domain:
+                        domain_parts = original_ip.lower().split('.')
+                        for server in servers:
+                            attributes = server.get('attributes', {})
+                            server_name = attributes.get('name', '').lower()
+                            server_port_attr = str(attributes.get('port', ''))
+                            
+                            # Check if server name contains domain parts and port matches
+                            if (server_port_attr == port and 
+                                any(part in server_name for part in domain_parts if len(part) > 3)):
+                                self.log_status(f"Found name match: {server_name} (port: {server_port_attr})")
+                                return extract_server_info(server)
+                    
+                    # Strategy 3: If searching by server name part, look for name and port matches
+                    if search_type == 'server_name_part':
+                        for server in servers:
+                            attributes = server.get('attributes', {})
+                            server_name = attributes.get('name', '').lower()
+                            server_port_attr = str(attributes.get('port', ''))
+                            
+                            # Check if server name contains the search term and port matches
+                            if server_port_attr == port and search_term in server_name:
+                                self.log_status(f"Found server name match: {server_name} (port: {server_port_attr})")
+                                return extract_server_info(server)
+                    
+                    # Strategy 4: Port-only match as last resort (for name-based searches)
+                    if search_type in ['domain_part', 'server_name_part'] and len(servers) > 0:
+                        for server in servers:
+                            attributes = server.get('attributes', {})
+                            server_port_attr = str(attributes.get('port', ''))
+                            
+                            if server_port_attr == port:
+                                self.log_status(f"Found port match as fallback: {attributes.get('name', 'Unknown')} (port: {server_port_attr})")
+                                return extract_server_info(server)
+                
+                # Small delay between search attempts to be nice to the API
+                time.sleep(1)
+            
+            # If all search attempts failed
+            self.log_status(f"Could not find server {server_ip} on BattleMetrics after trying multiple search methods")
+            return None
+                
+        except Exception as e:
+            self.log_status(f"Error searching BattleMetrics for {server_ip}: {e}")
+            return None
+    
+    def validate_servers(self):
+        """Validate all servers and show results"""
+        if not self.servers:
+            messagebox.showinfo("No Servers", "No servers to validate.")
+            return
+        
+        # Create validation window
+        validation_window = tk.Toplevel(self.root)
+        validation_window.title("Server Validation")
+        validation_window.geometry("750x650")
+        validation_window.resizable(True, True)
+        validation_window.minsize(600, 500)  # Set minimum size
+        
+        # Method selection frame
+        method_frame = tk.LabelFrame(validation_window, text="Validation Method", padx=10, pady=5)
+        method_frame.pack(fill="x", padx=10, pady=(10, 5))
+        
+        validation_method = tk.StringVar(value="ping")
+        tk.Radiobutton(method_frame, text="Quick Ping (Fast, less accurate)", 
+                      variable=validation_method, value="ping").pack(anchor="w", pady=2)
+        tk.Radiobutton(method_frame, text="Battlemetrics API (Slower, more accurate)", 
+                      variable=validation_method, value="battlemetrics").pack(anchor="w", pady=2)
+        
+        # Progress frame
+        progress_frame = tk.LabelFrame(validation_window, text="Progress", padx=10, pady=5)
+        progress_frame.pack(fill="x", padx=10, pady=5)
+        
+        progress_var = tk.DoubleVar()
+        progress_bar = ttk.Progressbar(progress_frame, variable=progress_var, maximum=len(self.servers))
+        progress_bar.pack(fill="x", pady=5)
+        
+        status_label = tk.Label(progress_frame, text="Click 'Start Validation' to begin...", font=("Arial", 10))
+        status_label.pack(pady=2)
+        
+        # Timing info frame
+        timing_frame = tk.Frame(progress_frame)
+        timing_frame.pack(fill="x", pady=5)
+        
+        elapsed_label = tk.Label(timing_frame, text="Elapsed: 00:00", font=("Arial", 9))
+        elapsed_label.pack(side="left", padx=10)
+        
+        avg_time_label = tk.Label(timing_frame, text="Avg per server: --", font=("Arial", 9))
+        avg_time_label.pack(side="left", padx=10)
+        
+        eta_label = tk.Label(timing_frame, text="ETA: --", font=("Arial", 9))
+        eta_label.pack(side="left", padx=10)
+        
+        # Stop button
+        stop_btn = tk.Button(timing_frame, text="Stop", bg="#dc3545", fg="white", 
+                            font=("Arial", 9, "bold"), state="disabled")
+        stop_btn.pack(side="right", padx=10)
+        
+        # Results frame
+        results_frame = tk.LabelFrame(validation_window, text="Validation Results", padx=5, pady=5)
+        results_frame.pack(fill="both", expand=True, padx=10, pady=5)
+        
+        # Results text with scrollbar
+        text_frame = tk.Frame(results_frame)
+        text_frame.pack(fill="both", expand=True)
+        
+        results_text = tk.Text(text_frame, font=("Consolas", 9), wrap="none", height=15)
+        v_scrollbar = tk.Scrollbar(text_frame, orient="vertical", command=results_text.yview)
+        h_scrollbar = tk.Scrollbar(text_frame, orient="horizontal", command=results_text.xview)
+        results_text.config(yscrollcommand=v_scrollbar.set, xscrollcommand=h_scrollbar.set)
+        
+        results_text.pack(side="left", fill="both", expand=True)
+        v_scrollbar.pack(side="right", fill="y")
+        h_scrollbar.pack(side="bottom", fill="x")
+        
+        # Bottom frame for statistics and buttons
+        bottom_frame = tk.Frame(validation_window)
+        bottom_frame.pack(fill="x", padx=10, pady=10, side="bottom")
+        
+        # Statistics frame
+        stats_frame = tk.LabelFrame(bottom_frame, text="Statistics", padx=10, pady=5)
+        stats_frame.pack(fill="x", pady=(0, 10))
+        
+        stats_container = tk.Frame(stats_frame)
+        stats_container.pack()
+        
+        online_label = tk.Label(stats_container, text="Online: 0", font=("Arial", 11, "bold"), fg="green")
+        online_label.pack(side="left", padx=15)
+        
+        offline_label = tk.Label(stats_container, text="Offline: 0", font=("Arial", 11, "bold"), fg="red")
+        offline_label.pack(side="left", padx=15)
+        
+        total_label = tk.Label(stats_container, text=f"Total: {len(self.servers)}", font=("Arial", 11, "bold"))
+        total_label.pack(side="left", padx=15)
+        
+        # Action buttons frame
+        buttons_frame = tk.Frame(bottom_frame)
+        buttons_frame.pack(pady=5)
+        
+        start_btn = tk.Button(buttons_frame, text="Start Validation", 
+                             bg="#4CAF50", fg="white", font=("Arial", 10, "bold"))
+        start_btn.pack(side="left", padx=5, pady=5)
+        
+        remove_offline_btn = tk.Button(buttons_frame, text="Remove Offline Servers", 
+                                      bg="#8B0000", fg="white", font=("Arial", 10, "bold"),
+                                      state="disabled")
+        remove_offline_btn.pack(side="left", padx=5, pady=5)
+        
+        update_info_btn = tk.Button(buttons_frame, text="Update Server Info", 
+                                   bg="#FF8C00", fg="white", font=("Arial", 10, "bold"))
+        update_info_btn.pack(side="left", padx=5, pady=5)
+        
+        close_btn = tk.Button(buttons_frame, text="Close", command=validation_window.destroy,
+                             bg="#6c757d", fg="white", font=("Arial", 10, "bold"))
+        close_btn.pack(side="left", padx=5, pady=5)
+        
+        # Update server info function
+        def update_server_info():
+            if not self.servers:
+                return
+            
+            # Check if already updating
+            if hasattr(update_server_info, 'is_running') and update_server_info.is_running:
+                return
+            
+            # Set running flag
+            update_server_info.is_running = True
+            
+            # Disable buttons during update
+            start_btn.config(state="disabled")
+            update_info_btn.config(state="disabled", text="Updating...")
+            stop_btn.config(state="disabled")
+            remove_offline_btn.config(state="disabled")
+            
+            progress_var.set(0)
+            results_text.delete(1.0, tk.END)
+            status_label.config(text="Starting server info update...")
+            
+            # Reset timing labels for update
+            elapsed_label.config(text="Elapsed: 00:00")
+            avg_time_label.config(text="Avg per server: --")
+            eta_label.config(text="ETA: --")
+            
+            def update_thread():
+                update_start_time = time.time()
+                updated_servers = []
+                found_count = 0
+                completed_updates = 0
+                
+                # Check if window still exists before updating
+                def safe_update_gui(func):
+                    try:
+                        if validation_window.winfo_exists():
+                            func()
+                    except tk.TclError:
+                        pass  # Window was closed, ignore
+                
+                def update_timing_info_update():
+                    elapsed = time.time() - update_start_time
+                    elapsed_str = f"{int(elapsed//60):02d}:{int(elapsed%60):02d}"
+                    validation_window.after(0, lambda: safe_update_gui(lambda: elapsed_label.config(text=f"Elapsed: {elapsed_str}")))
+                    
+                    if completed_updates > 0:
+                        avg_time = elapsed / completed_updates
+                        avg_str = f"{avg_time:.1f}s"
+                        validation_window.after(0, lambda: safe_update_gui(lambda: avg_time_label.config(text=f"Avg per server: {avg_str}")))
+                        
+                        remaining_servers = len(self.servers) - completed_updates
+                        if remaining_servers > 0:
+                            eta_seconds = remaining_servers * avg_time
+                            eta_str = f"{int(eta_seconds//60):02d}:{int(eta_seconds%60):02d}"
+                            validation_window.after(0, lambda: safe_update_gui(lambda: eta_label.config(text=f"ETA: {eta_str}")))
+                        else:
+                            validation_window.after(0, lambda: safe_update_gui(lambda: eta_label.config(text="ETA: Complete")))
+                
+                # Add header
+                validation_window.after(0, lambda: safe_update_gui(lambda: results_text.insert(tk.END, "Updating Server Information from BattleMetrics API\n")))
+                validation_window.after(0, lambda: safe_update_gui(lambda: results_text.insert(tk.END, "STATUS   | PLAYERS | RANK | SERVER NAME\n")))
+                validation_window.after(0, lambda: safe_update_gui(lambda: results_text.insert(tk.END, "-" * 80 + "\n")))
+                
+                for i, server in enumerate(self.servers):
+                    server_name = server.get('name', 'Unknown')
+                    server_ip = server.get('ip', '')
+                    
+                    # Update status with progress
+                    validation_window.after(0, lambda name=server_name, idx=i: safe_update_gui(lambda: status_label.config(text=f"Updating {name}... ({idx + 1}/{len(self.servers)})")))
+                    
+                    # Update timing info
+                    update_timing_info_update()
+                    
+                    # Get detailed server info from BattleMetrics with retry logic
+                    server_info = None
+                    max_retries = 3
+                    for retry in range(max_retries):
+                        server_info = self.get_server_info_battlemetrics(server_ip, timeout=15, server_name=server_name)
+                        if server_info is not None:
+                            break
+                        elif retry < max_retries - 1:
+                            # Wait longer between retries to avoid rate limiting
+                            time.sleep(5)
+                            validation_window.after(0, lambda name=server_name, r=retry: safe_update_gui(lambda: status_label.config(text=f"Retrying {name}... (attempt {r+2})")))
+                    
+                    if server_info is None:
+                        validation_window.after(0, lambda name=server_name: safe_update_gui(lambda: status_label.config(text=f"Failed to get info for {name} after {max_retries} attempts")))
+                    
+                    # Increment completed counter
+                    completed_updates += 1
+                    
+                    if server_info:
+                        found_count += 1
+                        
+                        # Update server with new information
+                        updated_server = server.copy()
+                        
+                        # Update name if BattleMetrics has a different/better name
+                        if server_info.get('name') and server_info['name'] != 'Unknown':
+                            updated_server['name'] = server_info['name']
+                        
+                        # Update all the new fields
+                        updated_server.update({
+                            'battlemetrics_id': server_info.get('battlemetrics_id'),
+                            'official': server_info.get('official', False),
+                            'premium': server_info.get('premium', False),
+                            'modded': server_info.get('modded', False),
+                            'pve': server_info.get('pve', False),
+                            'country': server_info.get('country'),
+                            'rank': server_info.get('rank'),
+                            'map': server_info.get('map'),
+                            'max_players': server_info.get('maxPlayers'),
+                            'current_players': server_info.get('players'),
+                            'status': server_info.get('status'),
+                            'last_info_update': time.strftime('%Y-%m-%d %H:%M:%S'),
+                            'rust_type': server_info.get('rust_type'),
+                            'serverSteamId': server_info.get('serverSteamId')
+                        })
+                        
+                        # Format display info
+                        players_info = f"{server_info.get('players', 0)}/{server_info.get('maxPlayers', 0)}"
+                        rank_info = f"#{server_info.get('rank', 'N/A')}"
+                        status_info = "UPDATED"
+                        
+                        # Show official/premium indicators
+                        indicators = []
+                        if server_info.get('official'):
+                            indicators.append("OFFICIAL")
+                        if server_info.get('premium'):
+                            indicators.append("PREMIUM")
+                        if server_info.get('modded'):
+                            indicators.append("MODDED")
+                        if server_info.get('pve'):
+                            indicators.append("PVE")
+                        
+                        indicator_text = f" [{', '.join(indicators)}]" if indicators else ""
+                        
+                        result_line = f"{status_info:<8} | {players_info:<7} | {rank_info:<6} | {updated_server['name']}{indicator_text}\n"
+                        
+                        updated_servers.append(updated_server)
+                        
+                    else:
+                        # Keep original server if not found on BattleMetrics
+                        result_line = f"{'NOT FOUND':<8} | {'N/A':<7} | {'N/A':<6} | {server_name}\n"
+                        updated_servers.append(server)
+                    
+                    # Update results display
+                    def update_results(line):
+                        results_text.insert(tk.END, line)
+                        results_text.see(tk.END)
+                    
+                    validation_window.after(0, lambda line=result_line: safe_update_gui(lambda: update_results(line)))
+                    
+                    # Update progress
+                    validation_window.after(0, lambda: safe_update_gui(lambda: progress_var.set(progress_var.get() + 1)))
+                    
+                    # Rate limiting - be nice to the API
+                    if i < len(self.servers) - 1:
+                        time.sleep(3)  # 3 second delay between requests to avoid rate limiting
+                
+                # Save updated servers
+                self.servers = updated_servers
+                self.save_servers()
+                
+                # Update the main server list display
+                validation_window.after(0, lambda: safe_update_gui(lambda: self.update_server_list()))
+                
+                # Calculate final timing
+                total_elapsed = time.time() - update_start_time
+                elapsed_str = f"{int(total_elapsed//60):02d}:{int(total_elapsed%60):02d}"
+                
+                # Update final status
+                validation_window.after(0, lambda: safe_update_gui(lambda: status_label.config(text=f"Update complete! Found {found_count}/{len(self.servers)} servers in {elapsed_str}")))
+                validation_window.after(0, lambda: safe_update_gui(lambda: eta_label.config(text="ETA: Complete")))
+                validation_window.after(0, lambda: safe_update_gui(lambda: start_btn.config(state="normal")))
+                validation_window.after(0, lambda: safe_update_gui(lambda: update_info_btn.config(state="normal", text="Update Server Info")))
+                
+                # Clear running flag
+                update_server_info.is_running = False
+                
+                # Log completion (no popup)
+                self.log_status(f"Updated server info for {found_count}/{len(self.servers)} servers from BattleMetrics")
+            
+            # Start update thread
+            update_thread_obj = threading.Thread(target=update_thread, daemon=True)
+            update_thread_obj.start()
+        
+        # Validation control variables
+        validation_start_time = None
+        validation_stop_requested = False
+        completed_servers = 0
+        
+        def stop_validation():
+            nonlocal validation_stop_requested
+            validation_stop_requested = True
+            stop_btn.config(state="disabled", text="Stopping...")
+            status_label.config(text="Stopping validation...")
+        
+        def update_timing_info():
+            if validation_start_time is None:
+                return
+            
+            elapsed = time.time() - validation_start_time
+            elapsed_str = f"{int(elapsed//60):02d}:{int(elapsed%60):02d}"
+            elapsed_label.config(text=f"Elapsed: {elapsed_str}")
+            
+            if completed_servers > 0:
+                avg_time = elapsed / completed_servers
+                avg_str = f"{avg_time:.1f}s"
+                avg_time_label.config(text=f"Avg per server: {avg_str}")
+                
+                remaining_servers = len(self.servers) - completed_servers
+                if remaining_servers > 0:
+                    eta_seconds = remaining_servers * avg_time
+                    eta_str = f"{int(eta_seconds//60):02d}:{int(eta_seconds%60):02d}"
+                    eta_label.config(text=f"ETA: {eta_str}")
+                else:
+                    eta_label.config(text="ETA: Complete")
+            
+            # Schedule next update if validation is still running
+            if not validation_stop_requested and completed_servers < len(self.servers):
+                validation_window.after(1000, update_timing_info)
+        
+        # Start validation function
+        def start_validation():
+            nonlocal validation_start_time, validation_stop_requested, completed_servers
+            
+            # Reset timing variables
+            validation_start_time = time.time()
+            validation_stop_requested = False
+            completed_servers = 0
+            
+            # Disable start button and reset progress
+            start_btn.config(state="disabled", text="Validating...")
+            stop_btn.config(state="normal", command=stop_validation)
+            progress_var.set(0)
+            results_text.delete(1.0, tk.END)
+            online_label.config(text="Online: 0")
+            offline_label.config(text="Offline: 0")
+            remove_offline_btn.config(state="disabled")
+            
+            # Reset timing labels
+            elapsed_label.config(text="Elapsed: 00:00")
+            avg_time_label.config(text="Avg per server: --")
+            eta_label.config(text="ETA: --")
+            
+            # Start timing updates
+            update_timing_info()
+            
+            # Get selected method
+            method = validation_method.get()
+            
+            def validate_thread():
+                nonlocal completed_servers
+                online_servers = []
+                offline_servers = []
+                
+                def validate_single_server(i, server):
+                    nonlocal completed_servers
+                    
+                    # Check if stop was requested
+                    if validation_stop_requested:
+                        return None, i, server
+                    
+                    server_name = server.get('name', 'Unknown')
+                    server_ip = server.get('ip', '')
+                    
+                    # Update status
+                    validation_window.after(0, lambda: status_label.config(text=f"Testing {server_name}... ({completed_servers + 1}/{len(self.servers)})"))
+                    
+                    # Choose validation method
+                    if method == "battlemetrics":
+                        is_online = self.check_server_battlemetrics(server_ip, timeout=10, server_name=server_name)
+                    else:
+                        is_online = self.ping_server(server_ip)
+                    
+                    # Check again if stop was requested during validation
+                    if validation_stop_requested:
+                        return None, i, server
+                    
+                    if is_online:
+                        online_servers.append((i, server))
+                        status = "ONLINE"
+                        color = "green"
+                    else:
+                        offline_servers.append((i, server))
+                        status = "OFFLINE"
+                        color = "red"
+                    
+                    # Update results
+                    result_line = f"{status:<8} | {server_name:<40} | {server_ip}\n"
+                    
+                    def update_results(line, status_tag):
+                        results_text.insert(tk.END, line)
+                        # Configure tag colors first
+                        results_text.tag_config("online", foreground="green")
+                        results_text.tag_config("offline", foreground="red")
+                        # Get the line that was just inserted
+                        line_start = f"{results_text.index(tk.END)}-2l"
+                        line_end = f"{results_text.index(tk.END)}-1l"
+                        # Apply the tag to the entire line
+                        results_text.tag_add(status_tag, line_start, line_end)
+                        results_text.see(tk.END)
+                    
+                    validation_window.after(0, lambda: update_results(result_line, status.lower()))
+                    
+                    # Update progress and completed counter
+                    completed_servers += 1
+                    validation_window.after(0, lambda: progress_var.set(completed_servers))
+                    
+                    return is_online, i, server
+                
+                # Add header
+                method_name = "Battlemetrics API" if method == "battlemetrics" else "Network Ping"
+                validation_window.after(0, lambda: results_text.insert(tk.END, f"Validation Method: {method_name}\n"))
+                validation_window.after(0, lambda: results_text.insert(tk.END, "STATUS   | SERVER NAME                              | IP ADDRESS\n"))
+                validation_window.after(0, lambda: results_text.insert(tk.END, "-" * 80 + "\n"))
+                
+                # Use ThreadPoolExecutor for concurrent validation
+                max_workers = 5 if method == "battlemetrics" else 10  # Fewer concurrent requests for API
+                with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
+                    futures = [executor.submit(validate_single_server, i, server) for i, server in enumerate(self.servers)]
+                    
+                    for future in concurrent.futures.as_completed(futures):
+                        try:
+                            result = future.result()
+                            # If validation was stopped, break early
+                            if validation_stop_requested:
+                                # Cancel remaining futures
+                                for f in futures:
+                                    f.cancel()
+                                break
+                        except Exception as e:
+                            print(f"Error validating server: {e}")
+                
+                # Calculate final timing
+                total_elapsed = time.time() - validation_start_time
+                elapsed_str = f"{int(total_elapsed//60):02d}:{int(total_elapsed%60):02d}"
+                
+                # Update final statistics
+                online_count = len(online_servers)
+                offline_count = len(offline_servers)
+                
+                validation_window.after(0, lambda: online_label.config(text=f"Online: {online_count}"))
+                validation_window.after(0, lambda: offline_label.config(text=f"Offline: {offline_count}"))
+                
+                if validation_stop_requested:
+                    validation_window.after(0, lambda: status_label.config(text=f"Validation stopped! Tested {completed_servers}/{len(self.servers)} servers in {elapsed_str}"))
+                    validation_window.after(0, lambda: eta_label.config(text="ETA: Stopped"))
+                else:
+                    validation_window.after(0, lambda: status_label.config(text=f"Validation complete! Tested {len(self.servers)} servers in {elapsed_str}"))
+                    validation_window.after(0, lambda: eta_label.config(text="ETA: Complete"))
+                
+                validation_window.after(0, lambda: start_btn.config(state="normal", text="Start Validation"))
+                validation_window.after(0, lambda: stop_btn.config(state="disabled", text="Stop"))
+                
+                # Enable remove button if there are offline servers
+                if offline_count > 0:
+                    def remove_offline():
+                        if messagebox.askyesno("Confirm Removal", 
+                                             f"Are you sure you want to remove {offline_count} offline servers?\n\nThis action cannot be undone."):
+                            # Remove offline servers (in reverse order to maintain indices)
+                            for i, server in sorted(offline_servers, reverse=True):
+                                del self.servers[i]
+                            
+                            self.save_servers()
+                            self.update_server_list()
+                            self.log_status(f"Removed {offline_count} offline servers")
+                            validation_window.destroy()
+                    
+                    validation_window.after(0, lambda: remove_offline_btn.config(state="normal", command=remove_offline))
+            
+            # Start validation thread
+            validation_thread = threading.Thread(target=validate_thread, daemon=True)
+            validation_thread.start()
+        
+        # Connect buttons
+        start_btn.config(command=start_validation)
+        update_info_btn.config(command=update_server_info)
+    
+
+    
+    def import_servers_from_file(self):
+        """Import servers from a JSON file"""
+        from tkinter import filedialog
+        
+        filename = filedialog.askopenfilename(
+            title="Import Servers",
+            filetypes=[("JSON files", "*.json"), ("All files", "*.*")]
+        )
+        
+        if filename:
+            try:
+                with open(filename, 'r') as f:
+                    imported_servers = json.load(f)
+                
+                if not isinstance(imported_servers, list):
+                    messagebox.showerror("Error", "Invalid file format. Expected a list of servers.")
+                    return
+                
+                # Check for duplicates
+                existing_ips = {server.get('ip', '') for server in self.servers}
+                new_servers = []
+                
+                for server in imported_servers:
+                    if isinstance(server, dict) and server.get('ip') not in existing_ips:
+                        # Ensure required fields
+                        if 'name' not in server:
+                            server['name'] = f"Imported Server {len(new_servers) + 1}"
+                        new_servers.append(server)
+                
+                if new_servers:
+                    self.servers.extend(new_servers)
+                    self.save_servers()
+                    self.update_server_list()
+                    messagebox.showinfo("Success", f"Imported {len(new_servers)} new servers!\n"
+                                                  f"Skipped {len(imported_servers) - len(new_servers)} duplicates.")
+                    self.log_status(f"Imported {len(new_servers)} servers from {filename}")
+                else:
+                    messagebox.showinfo("No New Servers", "All servers in the file are already in your list.")
+                    
+            except Exception as e:
+                messagebox.showerror("Error", f"Failed to import servers: {e}")
+                self.log_status(f"Error importing servers: {e}")
+    
+    def export_servers_to_file(self):
+        """Export servers to a JSON file"""
+        from tkinter import filedialog
+        
+        if not self.servers:
+            messagebox.showwarning("No Servers", "No servers to export.")
+            return
+        
+        filename = filedialog.asksaveasfilename(
+            title="Export Servers",
+            defaultextension=".json",
+            filetypes=[("JSON files", "*.json"), ("All files", "*.*")]
+        )
+        
+        if filename:
+            try:
+                with open(filename, 'w') as f:
+                    json.dump(self.servers, f, indent=2)
+                messagebox.showinfo("Success", f"Exported {len(self.servers)} servers to {filename}")
+                self.log_status(f"Exported {len(self.servers)} servers to {filename}")
+            except Exception as e:
+                messagebox.showerror("Error", f"Failed to export servers: {e}")
+                self.log_status(f"Error exporting servers: {e}")
+    
+    def clear_log(self):
+        """Clear the log display"""
+        if hasattr(self, 'log_text'):
+            self.log_text.delete(1.0, tk.END)
+            self.log_status("Log cleared")
+    
+    def open_data_folder(self):
+        """Open the data folder in file explorer"""
+        import subprocess
+        import platform
+        
+        try:
+            if platform.system() == "Windows":
+                subprocess.run(["explorer", self.data_folder])
+            elif platform.system() == "Darwin":  # macOS
+                subprocess.run(["open", self.data_folder])
+            else:  # Linux
+                subprocess.run(["xdg-open", self.data_folder])
+            self.log_status("Opened data folder")
+        except Exception as e:
+            messagebox.showerror("Error", f"Failed to open data folder: {e}")
+    
+    def show_about(self):
+        """Show about dialog"""
+        about_text = """Rust Battlemetrics AFK Hour Adder Tool
+        
+Version: 2.0 Enhanced
+        
+Features:
+• AFK hour farming with multiple servers
+• Enhanced BattleMetrics integration
+• Server validation and info updates
+• Import/Export server lists
+• Real-time progress tracking
+
+Created for Rust server hour farming
+Enhanced with BattleMetrics API integration"""
+        
+        messagebox.showinfo("About", about_text)
+    
+    def show_server_context_menu(self, event):
+        """Show context menu for server list"""
+        try:
+            # Get the index of the clicked item
+            index = self.server_listbox.nearest(event.y)
+            if index < 0 or index >= len(self.get_filtered_servers()):
+                return
+            
+            # Select the item
+            self.server_listbox.selection_clear(0, tk.END)
+            self.server_listbox.selection_set(index)
+            
+            # Create context menu
+            context_menu = tk.Menu(self.root, tearoff=0)
+            context_menu.add_command(label="Ping Server", command=lambda: self.ping_selected_server(index))
+            context_menu.add_separator()
+            context_menu.add_command(label="Remove Server", command=self.remove_server)
+            
+            # Show menu
+            context_menu.tk_popup(event.x_root, event.y_root)
+        except Exception as e:
+            print(f"Error showing context menu: {e}")
+    
+    def get_filtered_servers(self):
+        """Get servers based on current filter"""
+        if self.server_filter == "premium":
+            return [s for s in self.servers if s.get("premium", False)]
+        elif self.server_filter == "non_premium":
+            return [s for s in self.servers if not s.get("premium", False)]
+        else:
+            return self.servers
+    
+    def ping_selected_server(self, listbox_index):
+        """Ping the selected server and show result"""
+        try:
+            filtered_servers = self.get_filtered_servers()
+            if listbox_index >= len(filtered_servers):
+                return
+            
+            server = filtered_servers[listbox_index]
+            server_name = server.get('name', 'Unknown')
+            server_ip = server.get('ip', '')
+            
+            # Show progress dialog
+            progress_dialog = tk.Toplevel(self.root)
+            progress_dialog.title("Pinging Server")
+            progress_dialog.geometry("300x100")
+            progress_dialog.resizable(False, False)
+            progress_dialog.transient(self.root)
+            progress_dialog.grab_set()
+            
+            # Center the dialog
+            progress_dialog.geometry("+%d+%d" % (self.root.winfo_rootx() + 50, self.root.winfo_rooty() + 50))
+            
+            tk.Label(progress_dialog, text=f"Pinging {server_name}...", font=("Arial", 10)).pack(pady=20)
+            
+            progress_bar = ttk.Progressbar(progress_dialog, mode='indeterminate')
+            progress_bar.pack(pady=10, padx=20, fill="x")
+            progress_bar.start()
+            
+            def ping_thread():
+                is_online = self.ping_server(server_ip, timeout=10)
+                
+                progress_dialog.after(0, lambda: progress_bar.stop())
+                progress_dialog.after(0, lambda: progress_dialog.destroy())
+                
+                # Show result
+                status = "ONLINE" if is_online else "OFFLINE"
+                color = "green" if is_online else "red"
+                icon = "info" if is_online else "warning"
+                
+                messagebox.showinfo("Ping Result", 
+                                  f"Server: {server_name}\nIP: {server_ip}\nStatus: {status}",
+                                  icon=icon)
+                
+                self.log_status(f"Pinged {server_name}: {status}")
+            
+            # Start ping in separate thread
+            ping_thread_obj = threading.Thread(target=ping_thread, daemon=True)
+            ping_thread_obj.start()
+            
+        except Exception as e:
+            messagebox.showerror("Error", f"Failed to ping server: {e}")
+            self.log_status(f"Error pinging server: {e}")
         
     def create_gui(self):
         # Main container with reduced padding
@@ -242,22 +1217,13 @@ class RustAFKHourAdder:
         version_label = tk.Label(links_frame, text="v1.0.0", font=("Arial", 9), fg="gray")
         version_label.pack()
         
-        # Links container
-        links_container = tk.Frame(links_frame)
-        links_container.pack()
-        
-        github_link = tk.Label(links_container, text="GitHub", 
-                              font=("Arial", 9), fg="blue", cursor="hand2")
-        github_link.pack(side="left", padx=5)
-        github_link.bind("<Button-1>", lambda e: self.open_github_link())
-        
-        discord_link = tk.Label(links_container, text="Discord", 
-                               font=("Arial", 9), fg="blue", cursor="hand2")
-        discord_link.pack(side="left", padx=5)
-        discord_link.bind("<Button-1>", lambda e: self.open_discord_link())
+
         
         self.update_server_list()
         self.update_timer()
+        
+        # Initialize GUI elements with loaded settings
+        self.initialize_gui_with_settings()
         
         # Set initial UI state based on stealth mode, minimal activity, and auto restart
         self.on_stealth_mode_change()
@@ -292,6 +1258,7 @@ class RustAFKHourAdder:
         
         self.server_listbox.pack(side="left", fill="both", expand=True)
         self.server_listbox.bind('<<ListboxSelect>>', self.on_server_selection_change)
+        self.server_listbox.bind('<Button-3>', self.show_server_context_menu)  # Right-click context menu
         scrollbar.pack(side="right", fill="y")
         
         # Right side - Buttons
@@ -302,10 +1269,15 @@ class RustAFKHourAdder:
         # Server management buttons
         tk.Label(right_frame, text="Server Actions", font=("Arial", 11, "bold")).pack(pady=(0, 10))
         
-        tk.Button(right_frame, text="Browse Servers", command=self.open_battlemetrics, 
-                 bg="#4CAF50", fg="white").pack(pady=2, fill="x")
         tk.Button(right_frame, text="Add Server", command=self.add_server).pack(pady=2, fill="x")
         tk.Button(right_frame, text="Remove Server", command=self.remove_server).pack(pady=2, fill="x")
+        
+        tk.Button(right_frame, text="Validate Servers", command=self.validate_servers,
+                 bg="#2196F3", fg="white").pack(pady=2, fill="x")
+        tk.Button(right_frame, text="Delete All Premium", command=self.delete_all_premium, 
+                 bg="#8B0000", fg="white").pack(pady=2, fill="x")
+        tk.Button(right_frame, text="Delete All Non-Premium", command=self.delete_all_non_premium, 
+                 bg="#8B0000", fg="white").pack(pady=2, fill="x")
         
         # Separator
         tk.Frame(right_frame, height=2, bg="gray").pack(fill="x", pady=10)
@@ -316,17 +1288,6 @@ class RustAFKHourAdder:
         tk.Button(right_frame, text="Show All", command=self.show_all_servers).pack(pady=2, fill="x")
         tk.Button(right_frame, text="Hide Premium", command=self.hide_premium_servers).pack(pady=2, fill="x")
         tk.Button(right_frame, text="Hide Non-Premium", command=self.hide_non_premium_servers).pack(pady=2, fill="x")
-        
-        # Separator
-        tk.Frame(right_frame, height=2, bg="gray").pack(fill="x", pady=10)
-        
-        # Danger zone
-        tk.Label(right_frame, text="Danger Zone", font=("Arial", 11, "bold"), fg="red").pack(pady=(0, 10))
-        
-        tk.Button(right_frame, text="Delete All Premium", command=self.delete_all_premium, 
-                 bg="#8B0000", fg="white").pack(pady=2, fill="x")
-        tk.Button(right_frame, text="Delete All Non-Premium", command=self.delete_all_non_premium, 
-                 bg="#8B0000", fg="white").pack(pady=2, fill="x")
         
         # Separator
         tk.Frame(right_frame, height=2, bg="gray").pack(fill="x", pady=10)
@@ -361,7 +1322,7 @@ class RustAFKHourAdder:
         self.pause_label.pack(side="left")
         self.pause_var = tk.StringVar(value="1 min")
         self.pause_dropdown = ttk.Combobox(pause_frame, textvariable=self.pause_var, 
-                                          values=["1 min", "2 min", "5 min", "10 min", "15 min", "19 min", "20 min", "25 min"], 
+                                          values=["45 sec", "1 min", "2 min", "5 min", "10 min", "15 min", "19 min", "20 min", "25 min"], 
                                           width=12, state="readonly")
         self.pause_dropdown.pack(side="left", padx=10)
         self.pause_dropdown.bind('<<ComboboxSelected>>', lambda e: self.on_pause_change())
@@ -735,25 +1696,7 @@ class RustAFKHourAdder:
         links_frame = tk.LabelFrame(content_frame, text="Community & Support", padx=15, pady=15)
         links_frame.pack(fill="x")
         
-        # GitHub link
-        github_frame = tk.Frame(links_frame)
-        github_frame.pack(pady=5)
-        
-        tk.Label(github_frame, text="GitHub:", font=("Arial", 11, "bold")).pack(side="left")
-        github_link = tk.Label(github_frame, text="https://jlaiii.github.io/RUST-BM-AFK/", 
-                              font=("Arial", 11), fg="blue", cursor="hand2")
-        github_link.pack(side="left", padx=(10, 0))
-        github_link.bind("<Button-1>", lambda e: self.open_github_link())
-        
-        # Discord link
-        discord_frame = tk.Frame(links_frame)
-        discord_frame.pack(pady=5)
-        
-        tk.Label(discord_frame, text="Discord:", font=("Arial", 11, "bold")).pack(side="left")
-        discord_link = tk.Label(discord_frame, text="https://discord.gg/a5T2xBhKgt", 
-                               font=("Arial", 11), fg="blue", cursor="hand2")
-        discord_link.pack(side="left", padx=(10, 0))
-        discord_link.bind("<Button-1>", lambda e: self.open_discord_link())
+
         
     def load_settings(self):
         settings_file = os.path.join(self.data_folder, "settings.json")
@@ -768,6 +1711,34 @@ class RustAFKHourAdder:
                     self.settings.update(saved_settings)
         except Exception as e:
             self.log_status(f"Error loading settings: {e}")
+    
+    def initialize_gui_with_settings(self):
+        """Initialize GUI elements with loaded settings"""
+        try:
+            # Set pause dropdown based on loaded pause_time
+            pause_time = self.settings.get("pause_time", 60)
+            if pause_time == 45:
+                self.pause_var.set("45 sec")
+            elif pause_time == 60:
+                self.pause_var.set("1 min")
+            elif pause_time == 120:
+                self.pause_var.set("2 min")
+            elif pause_time == 300:
+                self.pause_var.set("5 min")
+            elif pause_time == 600:
+                self.pause_var.set("10 min")
+            elif pause_time == 900:
+                self.pause_var.set("15 min")
+            elif pause_time == 1140:
+                self.pause_var.set("19 min")
+            elif pause_time == 1200:
+                self.pause_var.set("20 min")
+            elif pause_time == 1500:
+                self.pause_var.set("25 min")
+            else:
+                self.pause_var.set("1 min")  # Default fallback
+        except Exception as e:
+            self.log_status(f"Error initializing GUI with settings: {e}")
     
     def on_kill_after_movement_change(self):
         """Handle kill after movement checkbox change"""
@@ -846,31 +1817,33 @@ class RustAFKHourAdder:
         try:
             pause_text = self.pause_var.get()
             
-            if pause_text == "1 min":
-                pause_minutes = 1
+            if pause_text == "45 sec":
+                pause_seconds = 45
+            elif pause_text == "1 min":
+                pause_seconds = 60
             elif pause_text == "2 min":
-                pause_minutes = 2
+                pause_seconds = 120
             elif pause_text == "5 min":
-                pause_minutes = 5
+                pause_seconds = 300
             elif pause_text == "10 min":
-                pause_minutes = 10
+                pause_seconds = 600
             elif pause_text == "15 min":
-                pause_minutes = 15
+                pause_seconds = 900
             elif pause_text == "19 min":
-                pause_minutes = 19
+                pause_seconds = 1140
             elif pause_text == "20 min":
-                pause_minutes = 20
+                pause_seconds = 1200
             elif pause_text == "25 min":
-                pause_minutes = 25
+                pause_seconds = 1500
             else:
                 return  # Invalid selection, don't save
             
             # If kill after movement is enabled, set AFK loop to 10 minutes
             if self.kill_after_movement_var.get():
-                pause_minutes = 10
+                pause_seconds = 600
                 self.pause_var.set("10 min")
                 
-            self.settings["pause_time"] = pause_minutes * 60
+            self.settings["pause_time"] = pause_seconds
             self.save_settings()
         except Exception:
             pass  # Ignore errors during dropdown change
@@ -1143,13 +2116,45 @@ class RustAFKHourAdder:
         self.server_listbox.delete(0, tk.END)
         for i, server in enumerate(self.servers):
             # Apply filter
-            if self.server_filter == "premium" and not server["premium"]:
+            if self.server_filter == "premium" and not server.get("premium", False):
                 continue
-            elif self.server_filter == "non_premium" and server["premium"]:
+            elif self.server_filter == "non_premium" and server.get("premium", False):
                 continue
             
-            premium_text = " (Premium)" if server["premium"] else ""
-            self.server_listbox.insert(tk.END, f"{server['name']}{premium_text}")
+            # Build display text with enhanced information
+            display_parts = []
+            
+            # Server name
+            display_parts.append(server['name'])
+            
+            # Status indicators
+            indicators = []
+            if server.get("premium", False):
+                indicators.append("Premium")
+            if server.get("official", False):
+                indicators.append("Official")
+            if server.get("modded", False):
+                indicators.append("Modded")
+            if server.get("pve", False):
+                indicators.append("PvE")
+            
+            if indicators:
+                display_parts.append(f"({', '.join(indicators)})")
+            
+            # Player count if available
+            if server.get("current_players") is not None and server.get("max_players"):
+                display_parts.append(f"[{server['current_players']}/{server['max_players']}]")
+            
+            # Rank if available
+            if server.get("rank"):
+                display_parts.append(f"Rank #{server['rank']}")
+            
+            # Country if available
+            if server.get("country"):
+                display_parts.append(f"({server['country']})")
+            
+            display_text = " ".join(display_parts)
+            self.server_listbox.insert(tk.END, display_text)
         
         # Restore previous server selection if it exists
         self.restore_server_selection()
@@ -1164,9 +2169,10 @@ class RustAFKHourAdder:
         """Update the server count statistics display"""
         total_servers = len(self.servers)
         premium_servers = len([s for s in self.servers if s.get("premium", False)])
+        official_servers = len([s for s in self.servers if s.get("official", False)])
         non_premium_servers = total_servers - premium_servers
         
-        count_text = f"Total: {total_servers}\nPremium: {premium_servers}\nNon-Premium: {non_premium_servers}"
+        count_text = f"Total: {total_servers}\nPremium: {premium_servers}\nOfficial: {official_servers}\nNon-Premium: {non_premium_servers}"
         self.server_count_label.config(text=count_text)
     
     def add_server(self):
@@ -1647,7 +2653,11 @@ class RustAFKHourAdder:
         self.status_label.config(text="Hour Adder Running...")
         self.log_status(f"=== COUNTDOWN COMPLETED in {countdown_duration:.1f}s - RUST HOUR ADDER NOW ACTIVE ===")
         self.log_status(f"Target Server: {self.selected_server['name']} ({self.selected_server['ip']})")
-        self.log_status(f"Cycle Interval: {self.settings['pause_time'] // 60} minutes")
+        pause_time = self.settings['pause_time']
+        if pause_time < 60:
+            self.log_status(f"Cycle Interval: {pause_time} seconds")
+        else:
+            self.log_status(f"Cycle Interval: {pause_time // 60} minutes {pause_time % 60} seconds" if pause_time % 60 > 0 else f"Cycle Interval: {pause_time // 60} minutes")
         self.log_status(f"Kill After Movement: {'ENABLED' if self.settings['kill_after_movement'] else 'DISABLED'}")
         
         # Start the main AFK loop
@@ -2842,23 +3852,7 @@ class RustAFKHourAdder:
         
         self.stop_add_servers_btn.config(state="disabled")
     
-    def open_github_link(self):
-        """Open the GitHub link in the default web browser"""
-        import webbrowser
-        webbrowser.open("https://jlaiii.github.io/RUST-BM-AFK/")
-        self.log_status("Opened GitHub link in browser")
-    
-    def open_discord_link(self):
-        """Open the Discord invite link in the default web browser"""
-        import webbrowser
-        webbrowser.open("https://discord.gg/a5T2xBhKgt")
-        self.log_status("Opened Discord invite in browser")
-    
-    def open_battlemetrics(self):
-        """Open Battlemetrics Rust servers page in the default web browser"""
-        import webbrowser
-        webbrowser.open("https://www.battlemetrics.com/servers/rust")
-        self.log_status("Opened Battlemetrics server browser in browser")
+
     
     def update_timer(self):
         if self.is_running and self.start_time:
