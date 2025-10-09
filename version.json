@@ -1,16 +1,38 @@
 {
-  "version": "1.3.5",
+  "version": "1.3.7",
   "release_date": "2025-10-09",
   "download_url": "https://github.com/jlaiii/RUST-BM-AFK/releases/latest",
   "github_url": "https://github.com/jlaiii/RUST-BM-AFK",
   "changelog": [
-    "TEST UPDATE for v1.3.4 users - Testing update system reliability",
-    "Enhanced window title to show version more prominently",
-    "Improved update detection logging for better debugging",
-    "This update verifies the fixed update system works correctly",
-    "Small improvements to user interface elements"
+    "FINAL TEST UPDATE - Testing cache-busting with v1.3.6 backup",
+    "This should be detected immediately after GitHub push",
+    "Verifying complete update flow works perfectly",
+    "Testing countdown timer and automatic restart",
+    "Confirming update system is production ready"
   ],
   "version_history": [
+    {
+      "version": "1.3.7",
+      "release_date": "2025-10-09",
+      "changelog": [
+        "FINAL TEST UPDATE - Testing cache-busting with v1.3.6 backup",
+        "This should be detected immediately after GitHub push",
+        "Verifying complete update flow works perfectly",
+        "Testing countdown timer and automatic restart",
+        "Confirming update system is production ready"
+      ]
+    },
+    {
+      "version": "1.3.6",
+      "release_date": "2025-10-09",
+      "changelog": [
+        "FIXED GITHUB CACHING ISSUE - Added cache-busting to update checks",
+        "Update system now bypasses GitHub CDN cache for immediate updates",
+        "No more waiting for GitHub cache to refresh after pushing updates",
+        "Enhanced update URLs with timestamp parameters",
+        "Update detection now works immediately after GitHub push"
+      ]
+    },
     {
       "version": "1.3.5",
       "release_date": "2025-10-09",

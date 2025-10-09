@@ -66,7 +66,7 @@ pyautogui.FAILSAFE = False
 class RustAFKHourAdder:
     def __init__(self):
         # Version information
-        self.current_version = "1.3.5"
+        self.current_version = "1.3.7"
         self.github_repo = "jlaiii/RUST-BM-AFK"
         self.version_url = f"https://raw.githubusercontent.com/{self.github_repo}/main/version.json"
         self.script_url = f"https://raw.githubusercontent.com/{self.github_repo}/main/rust_battlemetrics_hour_adder.py"
@@ -165,8 +165,12 @@ class RustAFKHourAdder:
         """Check for updates in background without blocking UI"""
         def check_updates():
             try:
-                self.log_status(f"Checking for updates from: {self.version_url}")
-                response = requests.get(self.version_url, timeout=10)
+                # Add cache-busting parameter to force fresh data from GitHub
+                import time
+                cache_buster = int(time.time())
+                url_with_cache_buster = f"{self.version_url}?t={cache_buster}"
+                self.log_status(f"Checking for updates from: {url_with_cache_buster}")
+                response = requests.get(url_with_cache_buster, timeout=10)
                 if response.status_code == 200:
                     remote_data = response.json()
                     remote_version = remote_data.get("version", "0.0.0")
@@ -190,8 +194,12 @@ class RustAFKHourAdder:
     def check_for_updates(self):
         """Manual update check with user feedback"""
         try:
-            self.log_status("Checking for updates...")
-            response = requests.get(self.version_url, timeout=10)
+            # Add cache-busting parameter to force fresh data from GitHub
+            import time
+            cache_buster = int(time.time())
+            url_with_cache_buster = f"{self.version_url}?t={cache_buster}"
+            self.log_status(f"Checking for updates from: {url_with_cache_buster}")
+            response = requests.get(url_with_cache_buster, timeout=10)
             
             if response.status_code == 200:
                 remote_data = response.json()
@@ -500,8 +508,11 @@ class RustAFKHourAdder:
         """Show changelog window"""
         try:
             # Always get changelog from GitHub - never use local files
-            self.log_status("Fetching changelog from GitHub...")
-            response = requests.get(self.version_url, timeout=10)
+            import time
+            cache_buster = int(time.time())
+            url_with_cache_buster = f"{self.version_url}?t={cache_buster}"
+            self.log_status(f"Fetching changelog from GitHub: {url_with_cache_buster}")
+            response = requests.get(url_with_cache_buster, timeout=10)
             if response.status_code == 200:
                 remote_data = response.json()
                 version_history = remote_data.get("version_history", [])
@@ -594,6 +605,7 @@ GitHub: github.com/{self.github_repo}"""
                 with open(servers_file, "r") as f:
                     servers = json.load(f)
                     self.log_status(f"Loaded {len(servers)} servers from servers.json")
+                    self.log_status("Update system: Cache-busting enabled for immediate GitHub updates")
                     return servers
             else:
                 # Create default servers file if it doesn't exist
