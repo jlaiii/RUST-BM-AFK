@@ -1,12 +1,27 @@
 {
-  "version": "1.0.0",
+  "version": "1.0.1",
   "release_date": "2025-10-09",
   "download_url": "https://github.com/jlaiii/RUST-BM-AFK/releases/latest",
   "github_url": "https://github.com/jlaiii/RUST-BM-AFK",
   "changelog": [
-    "First public release"
+    "Fixed server validation not re-checking on subsequent runs",
+    "Fixed battlemetrics validation caching issue",
+    "Fixed reset settings not using actual default values",
+    "Added automatic servers.json download if missing",
+    "Improved validation system reliability"
   ],
   "version_history": [
+    {
+      "version": "1.0.1",
+      "release_date": "2025-10-09",
+      "changelog": [
+        "Fixed server validation not re-checking on subsequent runs",
+        "Fixed battlemetrics validation caching issue", 
+        "Fixed reset settings not using actual default values",
+        "Added automatic servers.json download if missing",
+        "Improved validation system reliability"
+      ]
+    },
     {
       "version": "1.0.0",
       "release_date": "2025-10-09",

@@ -66,7 +66,7 @@ pyautogui.FAILSAFE = False
 class RustAFKHourAdder:
     def __init__(self):
         # Version information
-        self.current_version = "1.0.0"
+        self.current_version = "1.0.1"
         self.github_repo = "jlaiii/RUST-BM-AFK"
         self.version_url = f"https://raw.githubusercontent.com/{self.github_repo}/main/version.json"
         self.script_url = f"https://raw.githubusercontent.com/{self.github_repo}/main/rust_battlemetrics_hour_adder.py"
@@ -612,15 +612,31 @@ Discord: https://discord.gg/a5T2xBhKgt"""
                     self.log_status("Update system: Cache-busting enabled for immediate GitHub updates")
                     return servers
             else:
-                # Create default servers file if it doesn't exist
-                default_servers = [
-                    {"name": "Rustafied.com US Long III", "ip": "uslong3.rustafied.com:28015", "premium": True},
-                    {"name": "Rusty Moose US Medium", "ip": "medium.us.moose.gg:28010", "premium": True},
-                    {"name": "Atlas - US 2X Monthly", "ip": "216.39.240.89:28010", "premium": False}
-                ]
-                self.save_servers(default_servers)
-                self.log_status("Created default servers.json file")
-                return default_servers
+                # Try to download servers.json from GitHub if it doesn't exist
+                self.log_status("servers.json not found, attempting to download from GitHub...")
+                try:
+                    servers_url = "https://raw.githubusercontent.com/jlaiii/RUST-BM-AFK/refs/heads/main/data/servers.json"
+                    response = requests.get(servers_url, timeout=10)
+                    if response.status_code == 200:
+                        servers = response.json()
+                        # Save the downloaded servers
+                        self.save_servers(servers)
+                        self.log_status(f"Successfully downloaded {len(servers)} servers from GitHub")
+                        return servers
+                    else:
+                        self.log_status(f"Failed to download servers.json: HTTP {response.status_code}")
+                        raise Exception(f"HTTP {response.status_code}")
+                except Exception as download_error:
+                    self.log_status(f"Error downloading servers.json: {download_error}")
+                    # Create default servers file if download fails
+                    default_servers = [
+                        {"name": "Rustafied.com US Long III", "ip": "uslong3.rustafied.com:28015", "premium": True},
+                        {"name": "Rusty Moose US Medium", "ip": "medium.us.moose.gg:28010", "premium": True},
+                        {"name": "Atlas - US 2X Monthly", "ip": "216.39.240.89:28010", "premium": False}
+                    ]
+                    self.save_servers(default_servers)
+                    self.log_status("Created default servers.json file as fallback")
+                    return default_servers
         except Exception as e:
             self.log_status(f"Error loading servers: {e}")
             # Return default servers as fallback
@@ -1356,6 +1372,15 @@ Discord: https://discord.gg/a5T2xBhKgt"""
             validation_start_time = time.time()
             validation_stop_requested = False
             completed_servers = 0
+            
+            # Clear previous validation results from all servers to force fresh validation
+            for server in self.servers:
+                if '_validation_method' in server:
+                    del server['_validation_method']
+                if '_battlemetrics_found' in server:
+                    del server['_battlemetrics_found']
+                if 'status' in server:
+                    del server['status']
             
             # Disable start button and reset progress
             start_btn.config(state="disabled", text="Validating...")
@@ -3109,29 +3134,32 @@ if errorlevel 1 (
                               "• Clear server rotation selection\n\n" +
                               "This action cannot be undone!"):
             
-            # Reset settings to defaults
+            # Reset settings to defaults (match the actual defaults from __init__)
             self.settings = {
                 "pause_time": 60,  # 1 minute in seconds
-                "kill_after_movement": False,
-                "enable_startup_disconnect": False,
-                "disable_beep": True,
-                "minimal_activity": False,
-                "auto_start_rust": True,
-                "rust_load_time": "1 min",
-                "connection_wait_time": "1 min",
-                "start_at_boot": False,
-                "boot_wait_time": "4 min",
-                "auto_restart_game": False,
-                "restart_interval": "3h",
-                "add_servers_auto_start": True,
-                "add_servers_time": "1 min",
-                "add_servers_type": "all",
-                "selected_server_index": 0,
+                "kill_after_movement": False,  # Kill player after movement to prevent spectating
+                "enable_startup_disconnect": False,  # Option to enable initial disconnect command when starting
+                "disable_beep": True,  # Option to disable beep sounds
+                "auto_check_updates": True,  # Option to automatically check for updates on startup
+                "auto_update": False,  # Option to automatically download and install updates
+                "minimal_activity": False,  # Option to enable minimal activity mode (19min + kill after movement)
+                "auto_start_rust": True,  # Option to auto start Rust via Steam
+                "rust_load_time": "1 min",  # How long to wait for Rust to load
+                "connection_wait_time": "1 min",  # How long to wait for connection to stabilize
+                "start_at_boot": False,  # Option to start farming at Windows startup
+                "boot_wait_time": "4 min",  # How long to wait after Windows boot before starting
+                "auto_restart_game": False,  # Option to auto restart game for updates
+                "restart_interval": "3h",  # How often to restart the game
+                "typing_mode": "human",  # "human" for realistic typing, "bot" for instant paste, "kid" for slow with mistakes, "pro" for fast ~90 WPM
+                "add_servers_auto_start": True,  # Auto-start Rust for Server History Builder
+                "add_servers_time": "1 min",  # Time per server for Server History Builder
+                "add_servers_type": "all",  # Server type selection for Server History Builder
+                "selected_server_index": 0,  # Index of selected server in the list
                 "server_switching": {
                     "enabled": False,
-                    "time_range": "1-2",
-                    "stealth_mode": False,
-                    "selected_servers": []
+                    "time_range": "1-2",  # hours
+                    "stealth_mode": False,  # Enable stealth mode (connect → kill → wait)
+                    "selected_servers": []  # indices of servers to rotate through
                 }
             }
             
@@ -3141,6 +3169,7 @@ if errorlevel 1 (
             self.enable_disconnect_var.set(False)
             self.disable_beep_var.set(True)
             self.auto_check_updates_var.set(True)
+            self.auto_update_var.set(False)
             self.minimal_activity_var.set(False)
             self.auto_start_rust_var.set(True)
             self.rust_load_time_var.set("1 min")
@@ -3149,6 +3178,7 @@ if errorlevel 1 (
             self.boot_wait_time_var.set("4 min")
             self.auto_restart_game_var.set(False)
             self.restart_interval_var.set("3h")
+            self.typing_mode_var.set("human")
             self.add_servers_auto_start_var.set(True)
             self.add_servers_time_var.set("1 min")
             self.add_servers_type_var.set("all")
