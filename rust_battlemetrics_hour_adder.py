@@ -134,7 +134,7 @@ class RustAFKHourAdder:
 
         # Version information
 
-        self.current_version = "1.0.1"
+        self.current_version = "1.0.2"
 
         self.github_repo = "jlaiii/RUST-BM-AFK"
 
@@ -2762,6 +2762,9 @@ Discord: https://discord.gg/a5T2xBhKgt"""
 
         completed_servers = 0
 
+        # Set up window close handler to stop validation when window is closed
+        validation_window.protocol("WM_DELETE_WINDOW", lambda: None)  # Placeholder, will be set after function definition
+
         
 
         def stop_validation():
@@ -2773,6 +2776,20 @@ Discord: https://discord.gg/a5T2xBhKgt"""
             stop_btn.config(state="disabled", text="Stopping...")
 
             status_label.config(text="Stopping validation...")
+
+        
+        def on_validation_window_close():
+            """Handle validation window close - stop validation and destroy window"""
+            nonlocal validation_stop_requested
+            validation_stop_requested = True
+            # Also stop server info update if it's running
+            if hasattr(update_server_info, 'stop_requested'):
+                update_server_info.stop_requested = True
+            self.log_status("Validation stopped - window closed by user")
+            validation_window.destroy()
+
+        # Set the actual window close handler now that function is defined
+        validation_window.protocol("WM_DELETE_WINDOW", on_validation_window_close)
 
         
 
@@ -2953,6 +2970,15 @@ Discord: https://discord.gg/a5T2xBhKgt"""
                 self._bulk_validation_mode = True
 
                 
+                # Safe GUI update function to prevent errors when window is closed
+                def safe_update_gui(func):
+                    try:
+                        if validation_window.winfo_exists():
+                            func()
+                    except tk.TclError:
+                        pass  # Window was closed, ignore
+
+                
 
                 def validate_single_server(i, server):
 
@@ -2976,10 +3002,7 @@ Discord: https://discord.gg/a5T2xBhKgt"""
 
                     # Update status
 
-                    try:
-                        validation_window.after(0, lambda: status_label.config(text=f"Testing {server_name}... ({completed_servers + 1}/{len(self.servers)})"))
-                    except tk.TclError:
-                        pass
+                    validation_window.after(0, lambda name=server_name, count=completed_servers: safe_update_gui(lambda: status_label.config(text=f"Testing {name}... ({count + 1}/{len(self.servers)})")))
 
                     
 
@@ -3087,10 +3110,7 @@ Discord: https://discord.gg/a5T2xBhKgt"""
 
                     
 
-                    try:
-                        validation_window.after(0, lambda: update_results(result_line, status.lower()))
-                    except tk.TclError:
-                        pass
+                    validation_window.after(0, lambda line=result_line, stat=status.lower(): safe_update_gui(lambda: update_results(line, stat)))
 
                     
 
@@ -3098,10 +3118,7 @@ Discord: https://discord.gg/a5T2xBhKgt"""
 
                     completed_servers += 1
 
-                    try:
-                        validation_window.after(0, lambda: progress_var.set(completed_servers))
-                    except tk.TclError:
-                        pass
+                    validation_window.after(0, lambda count=completed_servers: safe_update_gui(lambda: progress_var.set(count)))
 
                     
 
@@ -3117,12 +3134,9 @@ Discord: https://discord.gg/a5T2xBhKgt"""
 
                 method_name = "Battlemetrics API" if method == "battlemetrics" else "Network Ping"
 
-                try:
-                    validation_window.after(0, lambda: results_text.insert(tk.END, f"Validation Method: {method_name}\n"))
-                    validation_window.after(0, lambda: results_text.insert(tk.END, "STATUS   | SERVER NAME                              | IP ADDRESS\n"))
-                    validation_window.after(0, lambda: results_text.insert(tk.END, "-" * 80 + "\n"))
-                except tk.TclError:
-                    pass
+                validation_window.after(0, lambda method=method_name: safe_update_gui(lambda: results_text.insert(tk.END, f"Validation Method: {method}\n")))
+                validation_window.after(0, lambda: safe_update_gui(lambda: results_text.insert(tk.END, "STATUS   | SERVER NAME                              | IP ADDRESS\n")))
+                validation_window.after(0, lambda: safe_update_gui(lambda: results_text.insert(tk.END, "-" * 80 + "\n")))
 
                 
 
@@ -3472,17 +3486,17 @@ Discord: https://discord.gg/a5T2xBhKgt"""
 
                 
 
-                validation_window.after(0, lambda: online_label.config(text=f"Online: {online_count}"))
+                validation_window.after(0, lambda count=online_count: safe_update_gui(lambda: online_label.config(text=f"Online: {count}")))
 
-                validation_window.after(0, lambda: offline_label.config(text=f"Offline: {offline_count}"))
+                validation_window.after(0, lambda count=offline_count: safe_update_gui(lambda: offline_label.config(text=f"Offline: {count}")))
 
                 
 
                 if validation_stop_requested:
 
-                    validation_window.after(0, lambda: status_label.config(text=f"Validation stopped! Tested {completed_servers}/{len(self.servers)} servers in {elapsed_str}"))
+                    validation_window.after(0, lambda count=completed_servers, elapsed=elapsed_str: safe_update_gui(lambda: status_label.config(text=f"Validation stopped! Tested {count}/{len(self.servers)} servers in {elapsed}")))
 
-                    validation_window.after(0, lambda: eta_label.config(text="ETA: Stopped"))
+                    validation_window.after(0, lambda: safe_update_gui(lambda: eta_label.config(text="ETA: Stopped")))
 
                     
 
@@ -3492,15 +3506,15 @@ Discord: https://discord.gg/a5T2xBhKgt"""
 
                 else:
 
-                    validation_window.after(0, lambda: status_label.config(text=f"Validation complete! Tested {len(self.servers)} servers in {elapsed_str}"))
+                    validation_window.after(0, lambda elapsed=elapsed_str: safe_update_gui(lambda: status_label.config(text=f"Validation complete! Tested {len(self.servers)} servers in {elapsed}")))
 
-                    validation_window.after(0, lambda: eta_label.config(text="ETA: Complete"))
+                    validation_window.after(0, lambda: safe_update_gui(lambda: eta_label.config(text="ETA: Complete")))
 
                 
 
-                validation_window.after(0, lambda: start_btn.config(state="normal", text="Start Validation"))
+                validation_window.after(0, lambda: safe_update_gui(lambda: start_btn.config(state="normal", text="Start Validation")))
 
-                validation_window.after(0, lambda: stop_btn.config(state="disabled", text="Stop"))
+                validation_window.after(0, lambda: safe_update_gui(lambda: stop_btn.config(state="disabled", text="Stop")))
 
                 
 
@@ -3568,7 +3582,7 @@ Discord: https://discord.gg/a5T2xBhKgt"""
 
                     
 
-                    validation_window.after(0, lambda: remove_offline_btn.config(state="normal", command=remove_offline))
+                    validation_window.after(0, lambda cmd=remove_offline: safe_update_gui(lambda: remove_offline_btn.config(state="normal", command=cmd)))
 
             
 
