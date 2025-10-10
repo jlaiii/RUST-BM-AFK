@@ -1157,7 +1157,7 @@ class RustAFKHourAdder:
 
         # Add version history
 
-        for version_info in reversed(version_history):  # Show newest first
+        for version_info in version_history:  # Show newest first (version_history is already in newest-first order)
 
             version = version_info.get("version", "Unknown")
 

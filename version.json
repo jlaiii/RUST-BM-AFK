@@ -1,6 +1,6 @@
 {
   "version": "1.0.2",
-  "release_date": "2025-10-09",
+  "release_date": "10/09/2025",
   "download_url": "https://github.com/jlaiii/RUST-BM-AFK/releases/latest",
   "github_url": "https://github.com/jlaiii/RUST-BM-AFK",
   "changelog": [
@@ -13,7 +13,7 @@
   "version_history": [
     {
       "version": "1.0.2",
-      "release_date": "2025-10-09",
+      "release_date": "10/09/2025",
       "changelog": [
         "Added auto-download missing data files feature (enabled by default)",
         "Fixed TclError crashes when closing validation window during operation",
@@ -24,7 +24,7 @@
     },
     {
       "version": "1.0.1",
-      "release_date": "2025-10-09",
+      "release_date": "10/09/2025",
       "changelog": [
         "Fixed server validation not re-checking on subsequent runs",
         "Fixed battlemetrics validation caching issue", 
@@ -35,7 +35,7 @@
     },
     {
       "version": "1.0.0",
-      "release_date": "2025-10-09",
+      "release_date": "10/09/2025",
       "changelog": [
         "First public release"
       ]
