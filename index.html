@@ -71,6 +71,32 @@
             font-weight: 500;
         }
 
+        /* Mobile Navigation */
+        @media (max-width: 768px) {
+            .flex-row {
+                flex-direction: column;
+                gap: 15px;
+            }
+
+            header .logo {
+                font-size: 1.5em;
+                margin-right: 0;
+                text-align: center;
+            }
+
+            header nav {
+                display: flex;
+                flex-wrap: wrap;
+                justify-content: center;
+                gap: 10px;
+            }
+
+            header nav a {
+                margin: 0;
+                font-size: 0.9em;
+            }
+        }
+
         /* Hero Section */
         #hero {
             background: url('https://user-images.githubusercontent.com/60754290/118331102-74c10a00-b552-11eb-89e4-6c3e721d51a6.jpg') no-repeat center center/cover; /* Placeholder for a dark, industrial Rust theme background image */
@@ -111,6 +137,34 @@
             color: #ccc;
         }
 
+        /* Mobile Hero Section */
+        @media (max-width: 768px) {
+            #hero {
+                height: 400px;
+                padding: 0 20px;
+            }
+
+            #hero h1 {
+                font-size: 2.2em;
+                line-height: 1.2;
+            }
+
+            #hero p {
+                font-size: 1.1em;
+                margin-bottom: 25px;
+            }
+        }
+
+        @media (max-width: 480px) {
+            #hero h1 {
+                font-size: 1.8em;
+            }
+
+            #hero p {
+                font-size: 1em;
+            }
+        }
+
         .cta-button {
             display: inline-block;
             background: var(--primary-color);
@@ -142,6 +196,24 @@
             color: var(--background-color);
         }
 
+        /* Mobile CTA Buttons */
+        @media (max-width: 768px) {
+            .cta-button {
+                display: block;
+                margin: 10px auto;
+                text-align: center;
+                max-width: 280px;
+                padding: 12px 20px;
+                font-size: 0.9em;
+            }
+
+            #hero .content div {
+                display: flex;
+                flex-direction: column;
+                align-items: center;
+            }
+        }
+
         /* Section Styling */
         section {
             padding: 60px 0;
@@ -154,6 +226,24 @@
             margin-bottom: 40px;
             color: var(--primary-color);
             text-transform: uppercase;
+        }
+
+        /* Mobile Section Styling */
+        @media (max-width: 768px) {
+            section {
+                padding: 40px 0;
+            }
+
+            section h2 {
+                font-size: 1.6em;
+                margin-bottom: 30px;
+                padding: 0 20px;
+            }
+
+            .container {
+                width: 95%;
+                padding: 0 10px;
+            }
         }
 
         /* Features Section */
@@ -183,6 +273,22 @@
             font-size: 1.2em;
         }
 
+        /* Mobile Features Section */
+        @media (max-width: 768px) {
+            #features .feature-list {
+                grid-template-columns: 1fr;
+                gap: 20px;
+            }
+
+            #features .feature-item {
+                padding: 20px;
+            }
+
+            #features .feature-item h3 {
+                font-size: 1.1em;
+            }
+        }
+
         /* Social Proof Section */
         #social-proof {
             background-color: #222;
@@ -199,12 +305,34 @@
             border-radius: 8px;
         }
 
+        /* Mobile Social Proof Section */
+        @media (max-width: 768px) {
+            #social-proof p {
+                font-size: 1em;
+                padding: 15px;
+                margin: 0 20px;
+                max-width: none;
+            }
+        }
+
         /* Footer */
         footer {
             background: #111;
             color: #aaa;
             text-align: center;
             padding: 20px 0;
+        }
+
+        /* Mobile Footer */
+        @media (max-width: 768px) {
+            footer {
+                padding: 15px 10px;
+            }
+
+            footer p {
+                font-size: 0.9em;
+                margin-bottom: 10px;
+            }
         }
         
         /* Utility for Flexbox Layout */
