@@ -134,7 +134,7 @@ class RustAFKHourAdder:
 
         # Version information
 
-        self.current_version = "1.0.2"
+        self.current_version = "1.0.3"
 
         self.github_repo = "jlaiii/RUST-BM-AFK"
 
@@ -146,7 +146,7 @@ class RustAFKHourAdder:
 
         self.root = tk.Tk()
 
-        self.root.title(f"RUST BM AFK Tool v{self.current_version} - Hour Farming Made Easy")
+        self.root.title(f"RUST BM AFK TOOL v{self.current_version} - Hour Farming Made Easy")
 
         self.root.geometry("900x730")  # Slightly taller to show all content
 
@@ -326,6 +326,8 @@ class RustAFKHourAdder:
         menubar.add_cascade(label="Help", menu=help_menu)
 
         help_menu.add_command(label="Check for Updates", command=self.check_for_updates)
+
+        help_menu.add_command(label="Verify Files", command=self.verify_files)
 
         help_menu.add_command(label="View Changelog", command=self.show_changelog)
 
@@ -701,7 +703,7 @@ class RustAFKHourAdder:
 
         # Progress content
 
-        tk.Label(progress_window, text="Updating RUST BM AFK Tool...", 
+        tk.Label(progress_window, text="Updating RUST BM AFK TOOL...", 
 
                 font=("Arial", 14, "bold")).pack(pady=20)
 
@@ -1204,12 +1206,111 @@ class RustAFKHourAdder:
                  bg="#95a5a6", fg="white", font=("Arial", 11)).pack(pady=10)
 
     
+    def verify_files(self):
+        """Verify and re-download data files from GitHub"""
+        try:
+            # Show confirmation dialog
+            result = messagebox.askyesno(
+                "Verify Files", 
+                "This will delete and re-download the following files from GitHub:\n\n"
+                "• servers.json\n"
+                "• setup_windows_startup.bat\n\n"
+                "Are you sure you want to continue?",
+                icon="warning"
+            )
+            
+            if not result:
+                return
+            
+            # Create progress window
+            progress_window = tk.Toplevel(self.root)
+            progress_window.title("Verifying Files...")
+            progress_window.geometry("400x200")
+            progress_window.resizable(False, False)
+            progress_window.transient(self.root)
+            progress_window.grab_set()
+            
+            # Center the window
+            progress_window.geometry("+%d+%d" % (self.root.winfo_rootx() + 100, self.root.winfo_rooty() + 100))
+            
+            # Progress content
+            tk.Label(progress_window, text="Verifying Files...", 
+                    font=("Arial", 14, "bold")).pack(pady=20)
+            
+            progress_var = tk.DoubleVar()
+            progress_bar = ttk.Progressbar(progress_window, variable=progress_var, maximum=100)
+            progress_bar.pack(fill="x", padx=40, pady=10)
+            
+            status_label = tk.Label(progress_window, text="Starting verification...", font=("Arial", 10))
+            status_label.pack(pady=10)
+            
+            def update_progress(value, text):
+                progress_var.set(value)
+                status_label.config(text=text)
+                progress_window.update()
+            
+            def perform_verification():
+                try:
+                    files_to_verify = {
+                        "servers.json": "https://raw.githubusercontent.com/jlaiii/RUST-BM-AFK/main/data/servers.json",
+                        "setup_windows_startup.bat": "https://raw.githubusercontent.com/jlaiii/RUST-BM-AFK/main/data/setup_windows_startup.bat"
+                    }
+                    
+                    total_files = len(files_to_verify)
+                    current_file = 0
+                    
+                    for filename, url in files_to_verify.items():
+                        current_file += 1
+                        file_path = os.path.join(self.data_folder, filename)
+                        
+                        # Update progress
+                        progress = (current_file - 1) / total_files * 80  # 80% for downloading
+                        update_progress(progress, f"Processing {filename}...")
+                        
+                        # Delete existing file if it exists
+                        if os.path.exists(file_path):
+                            os.remove(file_path)
+                            self.log_status(f"Verify Files: Deleted existing {filename}")
+                        
+                        # Download new file
+                        update_progress(progress + 20, f"Downloading {filename}...")
+                        response = requests.get(url, timeout=30)
+                        
+                        if response.status_code == 200:
+                            with open(file_path, 'w', encoding='utf-8') as f:
+                                f.write(response.text)
+                            self.log_status(f"Verify Files: Successfully downloaded {filename}")
+                        else:
+                            raise Exception(f"Failed to download {filename}: HTTP {response.status_code}")
+                    
+                    # Final progress
+                    update_progress(100, "Verification complete!")
+                    time.sleep(1)
+                    
+                    # Reload servers if servers.json was updated
+                    self.servers = self.load_servers()
+                    self.log_status("Verify Files: Reloaded server list")
+                    
+                    progress_window.destroy()
+                    messagebox.showinfo("Verification Complete", "All files have been successfully verified and updated!")
+                    
+                except Exception as e:
+                    progress_window.destroy()
+                    messagebox.showerror("Verification Failed", f"Failed to verify files: {e}")
+                    self.log_status(f"Verify Files: Error - {e}")
+            
+            # Start verification in background
+            threading.Thread(target=perform_verification, daemon=True).start()
+            
+        except Exception as e:
+            messagebox.showerror("Verification Error", f"Failed to start verification: {e}")
+            self.log_status(f"Verify Files: Startup error - {e}")
 
     def show_about(self):
 
         """Show about dialog"""
 
-        about_text = f"""RUST BM AFK Tool v{self.current_version}
+        about_text = f"""RUST BM AFK TOOL v{self.current_version}
 
 
 
@@ -1251,7 +1352,7 @@ Discord: https://discord.gg/a5T2xBhKgt"""
 
         
 
-        messagebox.showinfo("About RUST BM AFK Tool", about_text)
+        messagebox.showinfo("About RUST BM AFK TOOL", about_text)
 
     
 
