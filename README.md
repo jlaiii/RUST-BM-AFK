@@ -1,4 +1,4 @@
-# Rust Battlemetrics AFK Hour Adder Tool
+# Rust Battlemetrics AFK Tool
 
 A Python-based automation tool for Rust players to accumulate hours on Battlemetrics while AFK. This tool provides a user-friendly GUI interface with advanced features for server management, automation, and stealth modes.
 
