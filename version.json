@@ -7,6 +7,10 @@
     "Renamed tool to 'RUST BM AFK TOOL' for cleaner branding",
     "Added 'Verify Files' feature in Help menu to re-download data files",
     "Verify Files deletes and re-downloads servers.json and setup_windows_startup.bat",
+    "Redesigned About dialog with better formatting and layout",
+    "Added clickable GitHub and Discord links in About dialog",
+    "Improved About dialog spacing and visual design",
+    "Enhanced user interface with professional dialog windows",
     "Improved file integrity management with manual verification option",
     "Enhanced user control over data file management"
   ],
@@ -18,6 +22,10 @@
         "Renamed tool to 'RUST BM AFK TOOL' for cleaner branding",
         "Added 'Verify Files' feature in Help menu to re-download data files",
         "Verify Files deletes and re-downloads servers.json and setup_windows_startup.bat",
+        "Redesigned About dialog with better formatting and layout",
+        "Added clickable GitHub and Discord links in About dialog",
+        "Improved About dialog spacing and visual design",
+        "Enhanced user interface with professional dialog windows",
         "Improved file integrity management with manual verification option",
         "Enhanced user control over data file management"
       ]

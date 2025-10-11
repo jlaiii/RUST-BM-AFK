@@ -128,7 +128,7 @@ pyautogui.FAILSAFE = False
 
 
 
-class RustAFKHourAdder:
+class RustBMAFKTool:
 
     def __init__(self):
 
@@ -1307,52 +1307,82 @@ class RustAFKHourAdder:
             self.log_status(f"Verify Files: Startup error - {e}")
 
     def show_about(self):
-
-        """Show about dialog"""
-
-        about_text = f"""RUST BM AFK TOOL v{self.current_version}
-
-
-
-What this tool does:
-
-• Adds hours to your Rust account automatically
-
-• Farms hours while you're away from computer
-
-• Builds legit looking gaming profiles
-
-• Join high hour requirement groups and servers
-
-• Works with any Rust server via Battlemetrics
-
-
-
-Key Features:
-
-• Multiple server support with auto-switching
-
-• Smart AFK detection avoidance
-
-• Automatic updates
-
-• Safe and undetectable operation
-
-• Easy setup and use
-
-
-
-Perfect for building up your Rust profile hours!
-
-
-
-GitHub: github.com/{self.github_repo}
-
-Discord: https://discord.gg/a5T2xBhKgt"""
-
+        """Show about dialog with clickable links"""
+        # Create about window
+        about_window = tk.Toplevel(self.root)
+        about_window.title("About RUST BM AFK TOOL")
+        about_window.geometry("500x550")
+        about_window.resizable(False, False)
+        about_window.transient(self.root)
+        about_window.grab_set()
         
-
-        messagebox.showinfo("About RUST BM AFK TOOL", about_text)
+        # Center the window
+        about_window.geometry("+%d+%d" % (self.root.winfo_rootx() + 100, self.root.winfo_rooty() + 50))
+        
+        # Header
+        header_frame = tk.Frame(about_window, bg="#2c3e50")
+        header_frame.pack(fill="x")
+        
+        tk.Label(header_frame, text=f"RUST BM AFK TOOL v{self.current_version}", 
+                font=("Arial", 16, "bold"), fg="white", bg="#2c3e50").pack(pady=15)
+        
+        # Content frame
+        content_frame = tk.Frame(about_window)
+        content_frame.pack(fill="both", expand=True, padx=20, pady=20)
+        
+        # What this tool does section
+        tk.Label(content_frame, text="What this tool does:", 
+                font=("Arial", 12, "bold")).pack(anchor="w", pady=(0, 5))
+        
+        features = [
+            "• Adds hours to your Rust account automatically",
+            "• Farms hours while you're away from computer", 
+            "• Builds legit looking gaming profiles",
+            "• Join high hour requirement groups and servers",
+            "• Works with any Rust server via BattleMetrics"
+        ]
+        
+        for feature in features:
+            tk.Label(content_frame, text=feature, font=("Arial", 10)).pack(anchor="w", pady=1)
+        
+        # Key Features section
+        tk.Label(content_frame, text="Key Features:", 
+                font=("Arial", 12, "bold")).pack(anchor="w", pady=(15, 5))
+        
+        key_features = [
+            "• Multiple server support with auto-switching",
+            "• Smart AFK detection avoidance",
+            "• Automatic updates",
+            "• Safe and undetectable operation",
+            "• Easy setup and use"
+        ]
+        
+        for feature in key_features:
+            tk.Label(content_frame, text=feature, font=("Arial", 10)).pack(anchor="w", pady=1)
+        
+        # Perfect for section
+        tk.Label(content_frame, text="Perfect for building up your Rust profile hours!", 
+                font=("Arial", 11, "italic"), fg="#27ae60").pack(anchor="w", pady=(15, 10))
+        
+        # Links section
+        links_frame = tk.Frame(content_frame)
+        links_frame.pack(fill="x", pady=(10, 0))
+        
+        # GitHub link
+        github_link = tk.Label(links_frame, text="GitHub", 
+                              font=("Arial", 10, "underline"), fg="#3498db", cursor="hand2")
+        github_link.pack(anchor="w", pady=2)
+        github_link.bind("<Button-1>", lambda e: webbrowser.open(f"https://github.com/{self.github_repo}"))
+        
+        # Discord link
+        discord_link = tk.Label(links_frame, text="Discord", 
+                               font=("Arial", 10, "underline"), fg="#7289da", cursor="hand2")
+        discord_link.pack(anchor="w", pady=2)
+        discord_link.bind("<Button-1>", lambda e: webbrowser.open("https://discord.gg/a5T2xBhKgt"))
+        
+        # Close button
+        tk.Button(about_window, text="Close", command=about_window.destroy,
+                 bg="#95a5a6", fg="white", font=("Arial", 11)).pack(pady=20)
 
     
 
@@ -4603,7 +4633,7 @@ Discord: https://discord.gg/a5T2xBhKgt"""
 
         # Title
 
-        title_label = tk.Label(top_frame, text="Rust Battlemetrics AFK Hour Adder Tool", 
+        title_label = tk.Label(top_frame, text="RUST BM AFK TOOL", 
 
                               font=("Arial", 16, "bold"))
 
@@ -6272,7 +6302,7 @@ Discord: https://discord.gg/a5T2xBhKgt"""
 
             batch_content = f'''@echo off
 
-echo Starting Rust AFK Hour Adder from Windows Startup...
+echo Starting RUST BM AFK TOOL from Windows Startup...
 
 echo.
 
@@ -7648,7 +7678,7 @@ if errorlevel 1 (
 
         
 
-        self.log_status("=== RUST HOUR ADDER INITIALIZATION ===")
+        self.log_status("=== RUST BM AFK TOOL INITIALIZATION ===")
 
         self.log_status(f"Session started: {self.start_time.strftime('%Y-%m-%d %H:%M:%S')}")
 
@@ -7956,9 +7986,9 @@ if errorlevel 1 (
 
         
 
-        self.status_label.config(text="Hour Adder Running...")
+        self.status_label.config(text="RUST BM AFK TOOL Running...")
 
-        self.log_status(f"=== COUNTDOWN COMPLETED in {countdown_duration:.1f}s - RUST HOUR ADDER NOW ACTIVE ===")
+        self.log_status(f"=== COUNTDOWN COMPLETED in {countdown_duration:.1f}s - RUST BM AFK TOOL NOW ACTIVE ===")
 
         self.log_status(f"Target Server: {self.selected_server['name']} ({self.selected_server['ip']})")
 
@@ -9694,7 +9724,7 @@ if errorlevel 1 (
 
             
 
-            self.log_status("=== RUST HOUR ADDER STOPPED BY USER ===")
+            self.log_status("=== RUST BM AFK TOOL STOPPED BY USER ===")
 
             self.log_status(f"SESSION STATISTICS:")
 
@@ -9710,7 +9740,7 @@ if errorlevel 1 (
 
         else:
 
-            self.log_status("Rust Hour Adder stopped by user (no session data)")
+            self.log_status("RUST BM AFK TOOL stopped by user (no session data)")
 
         
 
@@ -11094,7 +11124,7 @@ if __name__ == "__main__":
 
     try:
 
-        app = RustAFKHourAdder()
+        app = RustBMAFKTool()
 
         app.run()
 
